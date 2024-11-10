@@ -1,0 +1,15 @@
+[package]
+name = "pets-configurator"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "A configuration management system for Pets, not Cattle"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+log = "0.4"
+env_logger = "0.10"
+sha2 = "0.10"
+thiserror = "2.0"
+users = "0.11"
+file-mode = "0.1"
