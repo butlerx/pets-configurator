@@ -131,9 +131,24 @@ impl PetsFile {
     pub fn source(&self) -> String {
         self.source.clone()
     }
+    pub fn mode(&self) -> &mode::Mode {
+        &self.mode
+    }
 
     pub fn packages(&self) -> &[PetsPackage] {
         &self.pkgs
+    }
+
+    pub fn post(&self) -> Option<&Vec<String>> {
+        self.post.as_ref()
+    }
+
+    pub fn user(&self) -> Option<&users::User> {
+        self.user.as_ref()
+    }
+
+    pub fn group(&self) -> Option<&users::Group> {
+        self.group.as_ref()
     }
 
     /// validates assumptions that must hold for the individual configuration files.
@@ -153,7 +168,7 @@ impl PetsFile {
         }
 
         // Check pre-update validation command if the file has changed.
-        if self.dest.needs_copy(&self.source) != PetsCause::NONE && !self.run_pre(true) {
+        if self.dest.needs_copy(&self.source) != PetsCause::None && !self.run_pre(true) {
             log::error!("pre-update validation failed for {}", self.source);
             false
         } else {

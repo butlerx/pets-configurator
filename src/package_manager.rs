@@ -1,4 +1,4 @@
-use std::{env, ffi::OsStr, fmt, process::Command, str};
+use std::{fmt, process::Command, str};
 
 // A PetsPackage represents a distribution package.
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -19,12 +19,6 @@ impl PetsPackage {
 impl fmt::Display for PetsPackage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
-    }
-}
-
-impl AsRef<OsStr> for PetsPackage {
-    fn as_ref(&self) -> &OsStr {
-        self.name.as_ref()
     }
 }
 
@@ -210,35 +204,25 @@ impl PetsPackage {
 
 // InstallCommand returns the command needed to install packages on this
 // system.
-pub fn install_command(package_manager: PackageManager) -> Command {
+pub fn install_command(package_manager: PackageManager) -> Vec<String> {
     match package_manager {
-        PackageManager::APT => {
-            let mut cmd = Command::new("apt-get");
-            cmd.args(["-y", "install"])
-                .envs(env::vars())
-                .env("DEBIAN_FRONTEND", "noninteractive");
-            cmd
-        }
-        PackageManager::YUM => {
-            let mut cmd = Command::new("yum");
-            cmd.args(["-y", "install"]);
-            cmd
-        }
-        PackageManager::APK => {
-            let mut cmd = Command::new("apk");
-            cmd.args(["add"]);
-            cmd
-        }
-        PackageManager::PACMAN => {
-            let mut cmd = Command::new("pacman");
-            cmd.args(["-S", "--noconfirm"]);
-            cmd
-        }
-        PackageManager::YAY => {
-            let mut cmd = Command::new("yay");
-            cmd.args(["-S", "--noconfirm"]);
-            cmd
-        }
+        PackageManager::APT => vec![
+            "apt-get".to_string(),
+            "-y".to_string(),
+            "install".to_string(),
+        ],
+        PackageManager::YUM => vec!["yum".to_string(), "-y".to_string(), "install".to_string()],
+        PackageManager::APK => vec!["apk".to_string(), "add".to_string()],
+        PackageManager::PACMAN => vec![
+            "pacman".to_string(),
+            "-S".to_string(),
+            "--noconfirm".to_string(),
+        ],
+        PackageManager::YAY => vec![
+            "yay".to_string(),
+            "-S".to_string(),
+            "--noconfirm".to_string(),
+        ],
     }
 }
 
@@ -248,28 +232,28 @@ mod tests {
 
     #[test]
     fn test_pkg_is_valid() {
-        let pkg = PetsPackage("coreutils".to_string());
+        let pkg = PetsPackage("coreutils".to_string(), None);
         assert!(pkg.is_valid());
     }
 
     #[test]
     fn test_pkg_is_not_valid() {
-        let pkg = PetsPackage("obviously-this-cannot-be valid ?".to_string());
+        let pkg = PetsPackage("obviously-this-cannot-be valid ?".to_string(), None);
         assert!(!pkg.is_valid());
     }
 
     #[test]
     fn test_is_installed() {
-        let pkg = PetsPackage("binutils".to_string());
+        let pkg = PetsPackage("binutils".to_string(), None);
         assert!(pkg.is_installed());
     }
 
     #[test]
     fn test_is_not_installed() {
-        let pkg = PetsPackage("abiword".to_string());
+        let pkg = PetsPackage("abiword".to_string(), None);
         assert!(!pkg.is_installed());
 
-        let pkg = PetsPackage("this is getting ridiculous".to_string());
+        let pkg = PetsPackage("this is getting ridiculous".to_string(), None);
         assert!(!pkg.is_installed());
     }
 }

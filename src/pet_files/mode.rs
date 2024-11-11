@@ -1,10 +1,17 @@
 use super::parser;
+use std::fmt;
 
 pub struct Mode(String);
 
 impl Default for Mode {
     fn default() -> Self {
         Self("".to_string())
+    }
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -18,5 +25,15 @@ impl TryFrom<&String> for Mode {
             Ok(_) => Ok(Self(mode)),
             Err(_) => Err(Self::Error::InvalidFileMode(mode)),
         }
+    }
+}
+
+impl Mode {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn as_u32(&self) -> Result<u32, std::num::ParseIntError> {
+        u32::from_str_radix(&self.0, 8)
     }
 }

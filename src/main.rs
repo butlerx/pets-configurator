@@ -72,42 +72,34 @@ fn main() {
     // Check validation errors in individual files. At this stage, the
     // command in the "pre" validation directive may not be installed yet.
     // An error in one file means we're gonna skip it but proceed with the rest.
-    let good_pets = files.iter().filter(|pf| pf.is_valid()).collect::<Vec<_>>();
+    let good_pets = files
+        .into_iter()
+        .filter(|pf| pf.is_valid())
+        .collect::<Vec<_>>();
 
-    /*
     // Generate the list of actions to perform.
-    let actions = new_pets_actions(good_pets);
+    let actions = planner::plan(&good_pets, family);
 
-    // Display:
+    if args.dry_run {
+        log::info!("User requested dry-run mode, not applying any changes");
+    }
+
+    // Display & Execute actions:
     // - packages to install
     // - files created/modified
     // - content diff (maybe?)
     // - owner changes
     // - permissions changes
     // - which post-update commands will be executed
-    for action in &actions {
-        log::info!("{}", action.command);
-    }
-    if args.dry_run {
-        log::info!("User requested dry-run mode, not applying any changes");
-        return;
-    }
-    */
-
-    // Execute actions
-    let exit_status = 0;
-    /*
-    for action in &actions {
-        log::info!("Running '{}'", action.command);
-        if let Err(err) = action.perform() {
-            log::error!("Error performing action {}: {}", action, err);
+    let mut exit_status = 0;
+    for action in actions {
+        if let Err(err) = action.perform(args.dry_run) {
+            log::error!("Error performing action: {}", err);
             exit_status = 1;
             break;
         }
     }
-    */
 
     log::info!("Pets run took {:?}", start_time.elapsed());
-
     process::exit(exit_status);
 }

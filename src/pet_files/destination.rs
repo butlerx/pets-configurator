@@ -41,6 +41,12 @@ impl From<&String> for Destination {
     }
 }
 
+impl From<Destination> for String {
+    fn from(val: Destination) -> Self {
+        val.dest
+    }
+}
+
 impl Destination {
     pub fn link(dest: &String) -> Self {
         let mut d = Self::from(dest);
@@ -48,15 +54,15 @@ impl Destination {
         d
     }
 
-    fn directory(&self) -> &str {
-        &self.directory
+    pub fn directory(&self) -> String {
+        self.directory.clone()
     }
 
     // returns PetsCause LINK if a symbolic link using source as TARGET
     // and dest as LINK_NAME needs to be created.
     pub fn needs_link(&self, source: String) -> PetsCause {
         if !self.link || self.dest.is_empty() {
-            return PetsCause::NONE;
+            return PetsCause::None;
         }
 
         match fs::symlink_metadata(&self.dest) {
@@ -64,7 +70,7 @@ impl Destination {
                 // Easy case first: Dest exists and it is not a symlink
                 if !metadata.file_type().is_symlink() {
                     log::error!("{} already exists", self.dest);
-                    return PetsCause::NONE;
+                    return PetsCause::None;
                 }
 
                 match fs::read_link(&self.dest) {
@@ -80,21 +86,21 @@ impl Destination {
                                 source
                             );
                         }
-                        PetsCause::NONE
+                        PetsCause::None
                     }
                     Err(err) => {
                         log::error!("cannot read link Dest file {}: {}", self.dest, err);
-                        PetsCause::NONE
+                        PetsCause::None
                     }
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // dest does not exist yet. Happy path, we are gonna create it!
-                PetsCause::LINK
+                PetsCause::Link
             }
             Err(err) => {
                 log::error!("cannot lstat Dest file {}: {}", self.dest, err);
-                PetsCause::NONE
+                PetsCause::None
             }
         }
     }
@@ -103,7 +109,7 @@ impl Destination {
     // meaning that it has to be created.
     pub fn needs_dir(&self) -> PetsCause {
         if self.directory.is_empty() {
-            return PetsCause::NONE;
+            return PetsCause::None;
         }
 
         match fs::symlink_metadata(&self.directory) {
@@ -115,15 +121,15 @@ impl Destination {
                         self.directory
                     );
                 }
-                PetsCause::NONE
+                PetsCause::None
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // Directory does not exist yet. Happy path, we are gonna create it!
-                PetsCause::DIR
+                PetsCause::Dir
             }
             Err(err) => {
                 log::error!("cannot lstat Directory {}: {}", self.directory, err);
-                PetsCause::NONE
+                PetsCause::None
             }
         }
     }
@@ -132,14 +138,14 @@ impl Destination {
     // CREATE if the Destination file does not exist yet, NONE otherwise.
     pub fn needs_copy(&self, source: &str) -> PetsCause {
         if self.link {
-            return PetsCause::NONE;
+            return PetsCause::None;
         }
 
         let sha_source = match sha256(source) {
             Ok(hash) => hash,
             Err(err) => {
                 log::error!("cannot determine sha256 of Source file {}: {}", source, err);
-                return PetsCause::NONE;
+                return PetsCause::None;
             }
         };
 
@@ -152,7 +158,7 @@ impl Destination {
                         self.dest,
                         sha_source
                     );
-                    return PetsCause::NONE;
+                    return PetsCause::None;
                 }
                 log::debug!(
                     "sha256[{}]={} != sha256[{}]={}",
@@ -161,16 +167,16 @@ impl Destination {
                     self.dest,
                     sha_dest
                 );
-                PetsCause::UPDATE
+                PetsCause::Update
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => PetsCause::CREATE,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => PetsCause::Create,
             Err(err) => {
                 log::error!(
                     "cannot determine sha256 of Dest file {}: {}",
                     self.dest,
                     err
                 );
-                PetsCause::NONE
+                PetsCause::None
             }
         }
     }
