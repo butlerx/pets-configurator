@@ -5,7 +5,7 @@ use std::{env, process, time::Instant};
 
 mod actions;
 mod pet_files;
-mod validator;
+mod planner;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -64,23 +64,13 @@ fn main() {
     log::info!("Found {} pets configuration files", files.len());
 
     // Config validator
-    if let Err(global_errors) = validator::check_global_constraints(&files) {
+    if let Err(global_errors) = planner::check_global_constraints(&files) {
         log::error!("{}", global_errors);
         // Global validation errors mean we should stop the whole update.
         process::exit(1);
     }
 
-    // Check validation errors in individual files. At this stage, the
-    // command in the "pre" validation directive may not be installed yet.
-    // An error in one file means we're gonna skip it but proceed with the rest.
-    let good_pets = files
-        .into_iter()
-        .filter(pet_files::PetsFile::is_valid)
-        .collect::<Vec<_>>();
-
-    // Generate the list of actions to perform.
-    let action_plan = actions::plan(&good_pets, &family);
-
+    let action_plan = planner::plan_actions(files, &family);
     if args.dry_run {
         log::info!("User requested dry-run mode, not applying any changes");
     }

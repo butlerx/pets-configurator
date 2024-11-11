@@ -1,8 +1,9 @@
 use super::{destination, mode, parser};
-use crate::actions::{Cause, Package};
+use crate::actions::{Action, Cause, Package};
 use std::{
     convert::TryFrom,
     fs,
+    os::unix::fs::{MetadataExt, PermissionsExt},
     path::PathBuf,
     process::{Command, Stdio},
 };
@@ -125,31 +126,16 @@ impl TryFrom<&PathBuf> for PetsFile {
 }
 
 impl PetsFile {
-    pub fn destination(&self) -> &destination::Destination {
-        &self.dest
+    pub fn destination(&self) -> String {
+        self.dest.to_string()
     }
 
     pub fn source(&self) -> String {
         self.source.clone()
     }
-    pub fn mode(&self) -> &mode::Mode {
-        &self.mode
-    }
 
     pub fn packages(&self) -> &[Package] {
         &self.pkgs
-    }
-
-    pub fn post(&self) -> Option<&Vec<String>> {
-        self.post.as_ref()
-    }
-
-    pub fn user(&self) -> Option<&users::User> {
-        self.user.as_ref()
-    }
-
-    pub fn group(&self) -> Option<&users::Group> {
-        self.group.as_ref()
     }
 
     /// validates assumptions that must hold for the individual configuration files.
@@ -169,7 +155,7 @@ impl PetsFile {
         }
 
         // Check pre-update validation command if the file has changed.
-        if self.dest.needs_copy(&self.source) != Cause::None && !self.run_pre(true) {
+        if self.dest.needs_copy(&self.source).is_some() && !self.run_pre(true) {
             log::error!("pre-update validation failed for {}", self.source);
             false
         } else {
@@ -230,6 +216,173 @@ impl PetsFile {
                 log::error!("pre-update command {:?}: {}\n", pre, err);
                 false
             }
+        }
+    }
+
+    /// returns a chown `Action` or nil if none is needed.
+    fn chown(&self) -> Option<Action> {
+        // Build arg (eg: 'root:staff', 'root', ':staff')
+        let mut arg = String::new();
+
+        let want_user_id = match &self.user {
+            Some(user) => {
+                let user_name = match user.name().to_str() {
+                    Some(name) => name,
+                    None => &user.name().to_string_lossy(),
+                };
+                arg.push_str(user_name);
+                Some(user.uid())
+            }
+            None => None,
+        };
+
+        let want_group_id = match &self.group {
+            Some(group) => {
+                if !arg.is_empty() {
+                    arg.push(':');
+                }
+                let group_name = match group.name().to_str() {
+                    Some(name) => name,
+                    None => &group.name().to_string_lossy(),
+                };
+                arg.push_str(group_name);
+
+                // Get the requested gid as integer
+                Some(group.gid())
+            }
+            None => None,
+        };
+
+        if arg.is_empty() {
+            // Return immediately if the file had no 'owner' / 'group' directives
+            return None;
+        }
+
+        // The action to (possibly) perform is a chown of the file.
+        let action = Action::new(
+            Cause::Owner,
+            vec!["/bin/chown".to_string(), arg.clone(), self.dest.to_string()],
+        );
+
+        let destination = self.dest.to_string();
+        // stat() the destination file to see if a chown is needed
+        let file_info = match fs::metadata(&destination) {
+            Ok(info) => info,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                // If the destination file is not there yet, prepare a chown for later on.
+                return Some(action);
+            }
+            Err(e) => {
+                log::error!("unexpected error in chown(): {}", e);
+                return None;
+            }
+        };
+
+        // Get the file ownership details from the metadata
+        let stat = file_info;
+
+        if let Some(want_uid) = want_user_id {
+            if stat.uid() != want_uid {
+                log::info!(
+                    "{} is owned by uid {} instead of {}",
+                    destination,
+                    stat.uid(),
+                    want_uid
+                );
+                return Some(action);
+            }
+        }
+
+        if let Some(want_gid) = want_group_id {
+            if stat.gid() != want_gid {
+                log::info!(
+                    "{} is owned by gid {} instead of {}",
+                    destination,
+                    stat.gid(),
+                    want_gid
+                );
+                return Some(action);
+            }
+        }
+
+        log::debug!(
+            "{} is owned by {}:{} already",
+            destination,
+            stat.uid(),
+            stat.gid()
+        );
+        None
+    }
+
+    ///  returns a chmod `Action` or nil if none is needed.
+    fn chmod(&self) -> Option<Action> {
+        if self.mode.is_empty() {
+            return None;
+        }
+
+        let action = Action::new(
+            Cause::Mode,
+            vec![
+                "/bin/chmod".to_string(),
+                self.mode.to_string(),
+                self.dest.to_string(),
+            ],
+        );
+
+        // stat(2) the destination file to see if a chmod is needed
+        let file_info = match fs::metadata(self.dest.to_string()) {
+            Ok(info) => info,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Some(action);
+            }
+            Err(e) => {
+                log::error!("unexpected error in chmod(): {}", e);
+                return None;
+            }
+        };
+
+        let old_mode = file_info.permissions().mode();
+
+        // See if the desired mode and reality differ.
+        match self.mode.as_u32() {
+            Ok(new_mode) if old_mode == new_mode => {
+                log::info!("{} is {:o} already", self.dest, new_mode);
+                None
+            }
+            Ok(new_mode) => {
+                log::info!("{} is {:o} instead of {:o}", self.dest, old_mode, new_mode);
+                Some(action)
+            }
+            Err(e) => {
+                log::error!("unexpected error in chmod(): {}", e);
+                None
+            }
+        }
+    }
+}
+
+impl From<&PetsFile> for Vec<Action> {
+    fn from(val: &PetsFile) -> Self {
+        let actions = vec![
+            val.dest.needs_dir(),
+            val.dest.needs_copy(&val.source),
+            val.dest.needs_link(&val.source),
+            val.chown(),
+            val.chmod(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+        // If any actions are performed, check for a post-action
+        if actions.is_empty() {
+            actions
+        } else {
+            val.post
+                .as_ref()
+                .map(|post| Action::new(Cause::Post, post.clone()))
+                .into_iter()
+                .chain(actions)
+                .collect()
         }
     }
 }

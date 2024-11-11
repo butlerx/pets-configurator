@@ -1,4 +1,4 @@
-use crate::actions::Cause;
+use crate::actions::{Action, Cause};
 use sha2::{Digest, Sha256};
 use std::{fmt, fs, io, path::Path};
 
@@ -58,11 +58,11 @@ impl Destination {
         self.directory.clone()
     }
 
-    // returns Cause LINK if a symbolic link using source as TARGET
-    // and dest as LINK_NAME needs to be created.
-    pub fn needs_link(&self, source: &str) -> Cause {
+    /// figures out if a symbolic link needs to be created, and returns the corresponding `Action`
+    /// With Cause Link and  source as target and dest as `Link_Name` needs to be created.
+    pub fn needs_link(&self, source: &str) -> Option<Action> {
         if !self.link || self.dest.is_empty() {
-            return Cause::None;
+            return None;
         }
 
         match fs::symlink_metadata(&self.dest) {
@@ -70,7 +70,7 @@ impl Destination {
                 // Easy case first: Dest exists and it is not a symlink
                 if !metadata.file_type().is_symlink() {
                     log::error!("{} already exists", self.dest);
-                    return Cause::None;
+                    return None;
                 }
 
                 match fs::read_link(&self.dest) {
@@ -86,30 +86,38 @@ impl Destination {
                                 source
                             );
                         }
-                        Cause::None
+                        None
                     }
                     Err(err) => {
                         log::error!("cannot read link Dest file {}: {}", self.dest, err);
-                        Cause::None
+                        None
                     }
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // dest does not exist yet. Happy path, we are gonna create it!
-                Cause::Link
+                Some(Action::new(
+                    Cause::Link,
+                    vec![
+                        String::from("ln"),
+                        String::from("-s"),
+                        source.to_string(),
+                        self.dest.to_string(),
+                    ],
+                ))
             }
             Err(err) => {
                 log::error!("cannot lstat Dest file {}: {}", self.dest, err);
-                Cause::None
+                None
             }
         }
     }
 
-    // returns Cause DIR if there is no directory at Directory,
+    // returns Action with Cause Dir if there is no directory at Directory,
     // meaning that it has to be created.
-    pub fn needs_dir(&self) -> Cause {
+    pub fn needs_dir(&self) -> Option<Action> {
         if self.directory.is_empty() {
-            return Cause::None;
+            return None;
         }
 
         match fs::symlink_metadata(&self.directory) {
@@ -121,33 +129,49 @@ impl Destination {
                         self.directory
                     );
                 }
-                Cause::None
+                None
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // Directory does not exist yet. Happy path, we are gonna create it!
-                Cause::Dir
+                Some(Action::new(
+                    Cause::Dir,
+                    vec![
+                        String::from("mkdir"),
+                        String::from("-p"),
+                        self.directory.clone(),
+                    ],
+                ))
             }
             Err(err) => {
                 log::error!("cannot lstat Directory {}: {}", self.directory, err);
-                Cause::None
+                None
             }
         }
     }
 
-    // returns Cause UPDATE if Source needs to be copied over Dest,
-    // CREATE if the Destination file does not exist yet, NONE otherwise.
-    pub fn needs_copy(&self, source: &str) -> Cause {
+    /// figures out if the given trigger represents a file that needs to
+    /// be updated, and returns the corresponding `Action`.
+    /// Cause Update if Source needs to be copied over Dest,
+    /// Create if the Destination file does not exist yet,
+    /// None otherwise.
+    pub fn needs_copy(&self, source: &str) -> Option<Action> {
         if self.link {
-            return Cause::None;
+            return None;
         }
 
         let sha_source = match sha256(source) {
             Ok(hash) => hash,
             Err(err) => {
                 log::error!("cannot determine sha256 of Source file {}: {}", source, err);
-                return Cause::None;
+                return None;
             }
         };
+
+        let command = vec![
+            String::from("cp"),
+            source.to_string(),
+            self.dest.to_string(),
+        ];
 
         match sha256(&self.dest) {
             Ok(sha_dest) => {
@@ -158,7 +182,7 @@ impl Destination {
                         self.dest,
                         sha_source
                     );
-                    return Cause::None;
+                    return None;
                 }
                 log::debug!(
                     "sha256[{}]={} != sha256[{}]={}",
@@ -167,16 +191,18 @@ impl Destination {
                     self.dest,
                     sha_dest
                 );
-                Cause::Update
+                Some(Action::new(Cause::Update, command))
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Cause::Create,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                Some(Action::new(Cause::Create, command))
+            }
             Err(err) => {
                 log::error!(
                     "cannot determine sha256 of Dest file {}: {}",
                     self.dest,
                     err
                 );
-                Cause::None
+                None
             }
         }
     }
@@ -226,7 +252,18 @@ mod tests {
         let dest = Destination::link(&dest_path);
 
         // The link does not exist yet, so needs_link should return Cause::Link
-        assert_eq!(dest.needs_link(&source_path), Cause::Link);
+        assert_eq!(
+            dest.needs_link(&source_path).unwrap(),
+            Action::new(
+                Cause::Link,
+                vec![
+                    String::from("ln"),
+                    String::from("-s"),
+                    source_path.clone(),
+                    dest_path.clone()
+                ]
+            )
+        );
     }
 
     #[test]
@@ -240,7 +277,7 @@ mod tests {
         std::os::unix::fs::symlink(&source_path, &dest_path).unwrap();
 
         let dest = Destination::link(&dest_path.to_str().unwrap().to_string());
-        assert_eq!(dest.needs_link(source_path.to_str().unwrap()), Cause::None);
+        assert_eq!(dest.needs_link(source_path.to_str().unwrap()), None);
     }
 
     #[test]
@@ -250,7 +287,17 @@ mod tests {
         let dest = Destination::from(&dest_path.to_str().unwrap().to_string());
 
         // needs_dir should return Cause::Dir because the directory does not exist
-        assert_eq!(dest.needs_dir(), Cause::Dir);
+        assert_eq!(
+            dest.needs_dir().unwrap(),
+            Action::new(
+                Cause::Dir,
+                vec![
+                    String::from("mkdir"),
+                    String::from("-p"),
+                    dest_path.to_str().unwrap().to_string()
+                ]
+            )
+        );
     }
 
     #[test]
@@ -261,7 +308,7 @@ mod tests {
         let dest = Destination::from(&existing_dir.to_str().unwrap().to_string());
 
         // needs_dir should return Cause::None because the directory already exists
-        assert_eq!(dest.needs_dir(), Cause::None);
+        assert_eq!(dest.needs_dir(), None);
     }
 
     #[test]
@@ -275,8 +322,15 @@ mod tests {
 
         // Destination file does not exist, so needs_copy should return Cause::Create
         assert_eq!(
-            dest.needs_copy(source_file.to_str().unwrap()),
-            Cause::Create
+            dest.needs_copy(source_file.to_str().unwrap()).unwrap(),
+            Action::new(
+                Cause::Create,
+                vec![
+                    String::from("cp"),
+                    source_file.to_str().unwrap().to_string(),
+                    dest_file.to_str().unwrap().to_string()
+                ]
+            )
         );
     }
 
@@ -294,8 +348,15 @@ mod tests {
 
         // Destination exists and content is different, so needs_copy should return Cause::Update
         assert_eq!(
-            dest.needs_copy(source_file.to_str().unwrap()),
-            Cause::Update
+            dest.needs_copy(source_file.to_str().unwrap()).unwrap(),
+            Action::new(
+                Cause::Update,
+                vec![
+                    String::from("cp"),
+                    source_file.to_str().unwrap().to_string(),
+                    dest_file.to_str().unwrap().to_string()
+                ]
+            )
         );
     }
 
@@ -312,6 +373,6 @@ mod tests {
         let dest = Destination::from(&dest_file.to_str().unwrap().to_string());
 
         // Destination exists and content is identical, so needs_copy should return Cause::None
-        assert_eq!(dest.needs_copy(source_file.to_str().unwrap()), Cause::None);
+        assert_eq!(dest.needs_copy(source_file.to_str().unwrap()), None);
     }
 }

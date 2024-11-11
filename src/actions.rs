@@ -1,7 +1,7 @@
+mod action;
 mod cause;
 pub mod package_manager;
-mod planner;
 
+pub use action::Action;
 pub use cause::Cause;
 pub use package_manager::{Package, PackageManager};
-pub use planner::plan;
