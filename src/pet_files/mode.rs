@@ -1,13 +1,8 @@
 use super::parser;
 use std::fmt;
 
+#[derive(Default)]
 pub struct Mode(String);
-
-impl Default for Mode {
-    fn default() -> Self {
-        Self("".to_string())
-    }
-}
 
 impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -22,7 +17,7 @@ impl TryFrom<&String> for Mode {
         let mode = mode.to_string();
         match file_mode::Mode::empty().set_str(&mode) {
             // The specified 'mode' string is valid.
-            Ok(_) => Ok(Self(mode)),
+            Ok(()) => Ok(Self(mode)),
             Err(_) => Err(Self::Error::InvalidFileMode(mode)),
         }
     }

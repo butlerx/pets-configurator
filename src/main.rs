@@ -1,9 +1,10 @@
+#![warn(clippy::pedantic)]
+
 use clap::Parser;
 use std::{env, process, time::Instant};
 
-mod package_manager;
+mod actions;
 mod pet_files;
-mod planner;
 mod validator;
 
 #[derive(Parser, Debug)]
@@ -25,7 +26,7 @@ struct Args {
 // Default configuration directory
 fn default_conf_dir() -> String {
     let home_dir = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    format!("{}/pets", home_dir)
+    format!("{home_dir}/pets")
 }
 
 fn setup_logging(debug: bool) {
@@ -44,13 +45,13 @@ fn main() {
     let start_time = Instant::now();
 
     // Print distro family
-    let family = package_manager::which_package_manager();
+    let family = actions::package_manager::which();
     match family {
-        package_manager::PackageManager::APT => log::debug!("Running on a Debian-like system"),
-        package_manager::PackageManager::YUM => log::debug!("Running on a RedHat-like system"),
-        package_manager::PackageManager::APK => log::debug!("Running on an Alpine system"),
-        package_manager::PackageManager::PACMAN | package_manager::PackageManager::YAY => {
-            log::debug!("Running on an Arch system")
+        actions::PackageManager::Apt => log::debug!("Running on a Debian-like system"),
+        actions::PackageManager::Yum => log::debug!("Running on a RedHat-like system"),
+        actions::PackageManager::Apk => log::debug!("Running on an Alpine system"),
+        actions::PackageManager::Pacman | actions::PackageManager::Yay => {
+            log::debug!("Running on an Arch system");
         }
     }
 
@@ -74,11 +75,11 @@ fn main() {
     // An error in one file means we're gonna skip it but proceed with the rest.
     let good_pets = files
         .into_iter()
-        .filter(|pf| pf.is_valid())
+        .filter(pet_files::PetsFile::is_valid)
         .collect::<Vec<_>>();
 
     // Generate the list of actions to perform.
-    let actions = planner::plan(&good_pets, family);
+    let action_plan = actions::plan(&good_pets, &family);
 
     if args.dry_run {
         log::info!("User requested dry-run mode, not applying any changes");
@@ -92,7 +93,7 @@ fn main() {
     // - permissions changes
     // - which post-update commands will be executed
     let mut exit_status = 0;
-    for action in actions {
+    for action in action_plan {
         if let Err(err) = action.perform(args.dry_run) {
             log::error!("Error performing action: {}", err);
             exit_status = 1;

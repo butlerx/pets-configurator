@@ -34,7 +34,7 @@ pub fn read_modelines<P: AsRef<Path>>(path: P) -> Result<HashMap<String, String>
     let reader = io::BufReader::new(file);
     reader
         .lines()
-        .filter_map(Result::ok)
+        .map_while(Result::ok)
         .filter(|line| line.contains("pets:"))
         .map(extract_modeline)
         .flat_map(|result| {

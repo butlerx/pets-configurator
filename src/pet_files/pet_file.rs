@@ -1,6 +1,5 @@
 use super::{destination, mode, parser};
-use crate::package_manager::PetsPackage;
-use crate::planner::PetsCause;
+use crate::actions::{Cause, Package};
 use std::{
     convert::TryFrom,
     fs,
@@ -12,7 +11,7 @@ pub struct PetsFile {
     // Absolute path to the configuration file
     source: String,
     dest: destination::Destination,
-    pkgs: Vec<PetsPackage>,
+    pkgs: Vec<Package>,
     user: Option<users::User>,
     group: Option<users::Group>,
     mode: mode::Mode,
@@ -50,32 +49,34 @@ impl TryFrom<&PathBuf> for PetsFile {
         let pkgs = match modelines.get("package") {
             Some(pkgs) => pkgs
                 .split_whitespace()
-                .map(|pkg| PetsPackage::new(pkg.to_string()))
+                .map(|pkg| Package::new(pkg.to_string()))
                 .collect(),
             None => Vec::new(),
         };
 
         let user = match modelines.get("owner") {
-            Some(user) => match users::get_user_by_name(user) {
-                Some(user) => Some(user),
-                None => {
+            Some(user) => {
+                if let Some(user) = users::get_user_by_name(user) {
+                    Some(user)
+                } else {
                     // TODO: one day we may add support for creating users
                     log::error!("unknown 'owner' {}, skipping directive", user);
                     None
                 }
-            },
+            }
             None => users::get_user_by_uid(users::get_current_uid()),
         };
 
         let group = match modelines.get("group") {
-            Some(group) => match users::get_group_by_name(group) {
-                Some(group) => Some(group),
-                None => {
+            Some(group) => {
+                if let Some(group) = users::get_group_by_name(group) {
+                    Some(group)
+                } else {
                     // TODO: one day we may add support for creating groups
                     log::error!("unknown 'group' {}, skipping directive", group);
                     None
                 }
-            },
+            }
             None => users::get_group_by_gid(users::get_current_gid()),
         };
 
@@ -84,12 +85,12 @@ impl TryFrom<&PathBuf> for PetsFile {
             .map(|pre| {
                 let pre_args = pre
                     .split_whitespace()
-                    .map(|s| s.to_string())
+                    .map(std::string::ToString::to_string)
                     .collect::<Vec<String>>();
-                if !pre_args.is_empty() {
-                    Some(pre_args)
-                } else {
+                if pre_args.is_empty() {
                     None
+                } else {
+                    Some(pre_args)
                 }
             })
             .unwrap_or_default();
@@ -99,12 +100,12 @@ impl TryFrom<&PathBuf> for PetsFile {
             .map(|post| {
                 let post_args = post
                     .split_whitespace()
-                    .map(|s| s.to_string())
+                    .map(std::string::ToString::to_string)
                     .collect::<Vec<String>>();
-                if !post_args.is_empty() {
-                    Some(post_args)
-                } else {
+                if post_args.is_empty() {
                     None
+                } else {
+                    Some(post_args)
                 }
             })
             .unwrap_or_default();
@@ -113,10 +114,10 @@ impl TryFrom<&PathBuf> for PetsFile {
         Ok(Self {
             source,
             dest,
-            mode,
             pkgs,
             user,
             group,
+            mode,
             pre,
             post,
         })
@@ -135,7 +136,7 @@ impl PetsFile {
         &self.mode
     }
 
-    pub fn packages(&self) -> &[PetsPackage] {
+    pub fn packages(&self) -> &[Package] {
         &self.pkgs
     }
 
@@ -152,7 +153,7 @@ impl PetsFile {
     }
 
     /// validates assumptions that must hold for the individual configuration files.
-    /// Ignore PathErrors for now. Get a list of valid files.
+    /// Ignore `PathErrors` for now. Get a list of valid files.
     pub fn is_valid(&self) -> bool {
         log::debug!("validating {}", self.source);
         // Check if the specified package(s) exists
@@ -168,7 +169,7 @@ impl PetsFile {
         }
 
         // Check pre-update validation command if the file has changed.
-        if self.dest.needs_copy(&self.source) != PetsCause::None && !self.run_pre(true) {
+        if self.dest.needs_copy(&self.source) != Cause::None && !self.run_pre(true) {
             log::error!("pre-update validation failed for {}", self.source);
             false
         } else {

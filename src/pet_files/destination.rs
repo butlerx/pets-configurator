@@ -1,4 +1,4 @@
-use crate::planner::PetsCause;
+use crate::actions::Cause;
 use sha2::{Digest, Sha256};
 use std::{fmt, fs, io, path::Path};
 
@@ -58,11 +58,11 @@ impl Destination {
         self.directory.clone()
     }
 
-    // returns PetsCause LINK if a symbolic link using source as TARGET
+    // returns Cause LINK if a symbolic link using source as TARGET
     // and dest as LINK_NAME needs to be created.
-    pub fn needs_link(&self, source: String) -> PetsCause {
+    pub fn needs_link(&self, source: &str) -> Cause {
         if !self.link || self.dest.is_empty() {
-            return PetsCause::None;
+            return Cause::None;
         }
 
         match fs::symlink_metadata(&self.dest) {
@@ -70,7 +70,7 @@ impl Destination {
                 // Easy case first: Dest exists and it is not a symlink
                 if !metadata.file_type().is_symlink() {
                     log::error!("{} already exists", self.dest);
-                    return PetsCause::None;
+                    return Cause::None;
                 }
 
                 match fs::read_link(&self.dest) {
@@ -86,30 +86,30 @@ impl Destination {
                                 source
                             );
                         }
-                        PetsCause::None
+                        Cause::None
                     }
                     Err(err) => {
                         log::error!("cannot read link Dest file {}: {}", self.dest, err);
-                        PetsCause::None
+                        Cause::None
                     }
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // dest does not exist yet. Happy path, we are gonna create it!
-                PetsCause::Link
+                Cause::Link
             }
             Err(err) => {
                 log::error!("cannot lstat Dest file {}: {}", self.dest, err);
-                PetsCause::None
+                Cause::None
             }
         }
     }
 
-    // returns PetsCause DIR if there is no directory at Directory,
+    // returns Cause DIR if there is no directory at Directory,
     // meaning that it has to be created.
-    pub fn needs_dir(&self) -> PetsCause {
+    pub fn needs_dir(&self) -> Cause {
         if self.directory.is_empty() {
-            return PetsCause::None;
+            return Cause::None;
         }
 
         match fs::symlink_metadata(&self.directory) {
@@ -121,31 +121,31 @@ impl Destination {
                         self.directory
                     );
                 }
-                PetsCause::None
+                Cause::None
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // Directory does not exist yet. Happy path, we are gonna create it!
-                PetsCause::Dir
+                Cause::Dir
             }
             Err(err) => {
                 log::error!("cannot lstat Directory {}: {}", self.directory, err);
-                PetsCause::None
+                Cause::None
             }
         }
     }
 
-    // returns PetsCause UPDATE if Source needs to be copied over Dest,
+    // returns Cause UPDATE if Source needs to be copied over Dest,
     // CREATE if the Destination file does not exist yet, NONE otherwise.
-    pub fn needs_copy(&self, source: &str) -> PetsCause {
+    pub fn needs_copy(&self, source: &str) -> Cause {
         if self.link {
-            return PetsCause::None;
+            return Cause::None;
         }
 
         let sha_source = match sha256(source) {
             Ok(hash) => hash,
             Err(err) => {
                 log::error!("cannot determine sha256 of Source file {}: {}", source, err);
-                return PetsCause::None;
+                return Cause::None;
             }
         };
 
@@ -158,7 +158,7 @@ impl Destination {
                         self.dest,
                         sha_source
                     );
-                    return PetsCause::None;
+                    return Cause::None;
                 }
                 log::debug!(
                     "sha256[{}]={} != sha256[{}]={}",
@@ -167,17 +167,151 @@ impl Destination {
                     self.dest,
                     sha_dest
                 );
-                PetsCause::Update
+                Cause::Update
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => PetsCause::Create,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Cause::Create,
             Err(err) => {
                 log::error!(
                     "cannot determine sha256 of Dest file {}: {}",
                     self.dest,
                     err
                 );
-                PetsCause::None
+                Cause::None
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::{self, File};
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_sha256_hashing() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test_file.txt");
+        let content = b"hello world";
+        fs::write(&file_path, content).unwrap();
+
+        let hash_result = sha256(file_path.to_str().unwrap()).unwrap();
+        let expected_hash = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+
+        assert_eq!(hash_result, expected_hash);
+    }
+
+    #[test]
+    fn test_destination_display() {
+        let dest = Destination::from(&"test/path".to_string());
+        assert_eq!(format!("{dest}"), "test/path");
+    }
+
+    #[test]
+    fn test_destination_from_string_conversion() {
+        let dest_path = "test/path".to_string();
+        let dest = Destination::from(&dest_path);
+
+        assert_eq!(dest.dest, dest_path);
+        assert_eq!(dest.directory, "test");
+        assert!(!dest.link);
+    }
+
+    #[test]
+    fn test_destination_needs_link_creation() {
+        let dir = tempdir().unwrap();
+        let dest_path = dir.path().join("link_path").to_str().unwrap().to_string();
+        let source_path = dir.path().join("source_file").to_str().unwrap().to_string();
+
+        let dest = Destination::link(&dest_path);
+
+        // The link does not exist yet, so needs_link should return Cause::Link
+        assert_eq!(dest.needs_link(&source_path), Cause::Link);
+    }
+
+    #[test]
+    fn test_destination_needs_link_exists() {
+        let dir = tempdir().unwrap();
+        let dest_path = dir.path().join("link_path");
+        let source_path = dir.path().join("source_file");
+
+        // Create a file and a symlink pointing to it
+        File::create(&source_path).unwrap();
+        std::os::unix::fs::symlink(&source_path, &dest_path).unwrap();
+
+        let dest = Destination::link(&dest_path.to_str().unwrap().to_string());
+        assert_eq!(dest.needs_link(source_path.to_str().unwrap()), Cause::None);
+    }
+
+    #[test]
+    fn test_destination_needs_dir_creation() {
+        let dir = tempdir().unwrap();
+        let dest_path = dir.path().join("non_existing_dir/path");
+        let dest = Destination::from(&dest_path.to_str().unwrap().to_string());
+
+        // needs_dir should return Cause::Dir because the directory does not exist
+        assert_eq!(dest.needs_dir(), Cause::Dir);
+    }
+
+    #[test]
+    fn test_destination_needs_dir_exists() {
+        let dir = tempdir().unwrap();
+        let existing_dir = dir.path().join("existing_dir");
+        fs::create_dir(&existing_dir).unwrap();
+        let dest = Destination::from(&existing_dir.to_str().unwrap().to_string());
+
+        // needs_dir should return Cause::None because the directory already exists
+        assert_eq!(dest.needs_dir(), Cause::None);
+    }
+
+    #[test]
+    fn test_destination_needs_copy_creation() {
+        let dir = tempdir().unwrap();
+        let source_file = dir.path().join("source_file.txt");
+        fs::write(&source_file, b"content").unwrap();
+
+        let dest_file = dir.path().join("dest_file.txt");
+        let dest = Destination::from(&dest_file.to_str().unwrap().to_string());
+
+        // Destination file does not exist, so needs_copy should return Cause::Create
+        assert_eq!(
+            dest.needs_copy(source_file.to_str().unwrap()),
+            Cause::Create
+        );
+    }
+
+    #[test]
+    fn test_destination_needs_copy_update() {
+        let dir = tempdir().unwrap();
+        let source_file = dir.path().join("source_file.txt");
+        let dest_file = dir.path().join("dest_file.txt");
+
+        // Write different contents to source and destination files
+        fs::write(&source_file, b"new content").unwrap();
+        fs::write(&dest_file, b"old content").unwrap();
+
+        let dest = Destination::from(&dest_file.to_str().unwrap().to_string());
+
+        // Destination exists and content is different, so needs_copy should return Cause::Update
+        assert_eq!(
+            dest.needs_copy(source_file.to_str().unwrap()),
+            Cause::Update
+        );
+    }
+
+    #[test]
+    fn test_destination_needs_copy_no_update_needed() {
+        let dir = tempdir().unwrap();
+        let source_file = dir.path().join("source_file.txt");
+        let dest_file = dir.path().join("dest_file.txt");
+
+        // Write identical content to source and destination files
+        fs::write(&source_file, b"same content").unwrap();
+        fs::write(&dest_file, b"same content").unwrap();
+
+        let dest = Destination::from(&dest_file.to_str().unwrap().to_string());
+
+        // Destination exists and content is identical, so needs_copy should return Cause::None
+        assert_eq!(dest.needs_copy(source_file.to_str().unwrap()), Cause::None);
     }
 }

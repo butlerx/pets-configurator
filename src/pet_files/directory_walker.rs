@@ -20,7 +20,7 @@ impl<P: AsRef<Path>> DirectoryWalker<P> {
             .map_err(ParseError::FileError)
             .into_iter()
             .flatten()
-            .filter_map(|entry| entry.ok())
+            .filter_map(std::result::Result::ok)
             .map(|entry| entry.path())
             .filter(|path| path.is_file())
             .map(Ok)
@@ -34,13 +34,13 @@ impl<P: AsRef<Path>> DirectoryWalker<P> {
 
         self.into_iter()
             .filter_map(Result::ok)
-            .filter_map(|path| process_pets_file(path).transpose())
+            .filter_map(|path| process_pets_file(&path).transpose())
             .collect()
     }
 }
 
-fn process_pets_file(path: PathBuf) -> Result<Option<PetsFile>, ParseError> {
-    match PetsFile::try_from(&path) {
+fn process_pets_file(path: &PathBuf) -> Result<Option<PetsFile>, ParseError> {
+    match PetsFile::try_from(path) {
         Ok(pf) => Ok(Some(pf)),
         Err(error) => match error {
             ParseError::NotPetsFile => Ok(None),
