@@ -294,7 +294,7 @@ mod tests {
                 vec![
                     String::from("mkdir"),
                     String::from("-p"),
-                    dest_path.to_str().unwrap().to_string()
+                    dest_path.parent().unwrap().to_str().unwrap().to_string()
                 ]
             )
         );
