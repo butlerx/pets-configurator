@@ -7,7 +7,11 @@ use crate::{
     actions::{self, package_manager::PackageManager},
     pet_files::PetsFile,
 };
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+    string::ToString,
+};
 
 #[derive(Debug)]
 pub struct DuplicateDefinitionError {
@@ -55,7 +59,7 @@ pub fn check_global_constraints(files: &[PetsFile]) -> Result<(), DuplicateDefin
     Ok(())
 }
 
-pub fn plan_actions(files: Vec<PetsFile>, family: &PackageManager) -> Vec<actions::Action> {
+pub fn plan_actions(files: Vec<PetsFile>) -> Vec<actions::Action> {
     // Check validation errors in individual files. At this stage, the
     // command in the "pre" validation directive may not be installed yet.
     // An error in one file means we're gonna skip it but proceed with the rest.
@@ -83,12 +87,26 @@ pub fn plan_actions(files: Vec<PetsFile>, family: &PackageManager) -> Vec<action
     if pkgs.is_empty() {
         trigger_actions.collect()
     } else {
-        let install_command = actions::package_manager::install_command(family)
-            .into_iter()
-            .chain(pkgs.iter().map(|p| p.to_string()))
-            .collect();
-        vec![actions::Action::new(actions::Cause::Pkg, install_command)]
-            .into_iter()
+        let mut packages: HashMap<String, Vec<String>> = HashMap::new();
+        for pkg in pkgs {
+            packages
+                .entry(pkg.package_manager.to_string())
+                .or_default()
+                .push(pkg.name);
+        }
+        packages
+            .iter()
+            .map(|(pkg_manager, packages)| {
+                let pkg_manager = PackageManager::from_str(pkg_manager).unwrap();
+                let install_vec = pkg_manager.install_command();
+                actions::Action::new(
+                    actions::Cause::Pkg,
+                    install_vec
+                        .into_iter()
+                        .chain(packages.iter().map(ToString::to_string))
+                        .collect(),
+                )
+            })
             .chain(trigger_actions)
             .collect()
     }

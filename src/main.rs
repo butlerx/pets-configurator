@@ -44,17 +44,6 @@ fn main() {
 
     let start_time = Instant::now();
 
-    // Print distro family
-    let family = actions::package_manager::which();
-    match family {
-        actions::PackageManager::Apt => log::debug!("Running on a Debian-like system"),
-        actions::PackageManager::Yum => log::debug!("Running on a RedHat-like system"),
-        actions::PackageManager::Apk => log::debug!("Running on an Alpine system"),
-        actions::PackageManager::Pacman | actions::PackageManager::Yay => {
-            log::debug!("Running on an Arch system");
-        }
-    }
-
     // Configuration parser
     let files = pet_files::load(&args.conf_dir).unwrap_or_else(|err| {
         log::error!("{}", err);
@@ -70,7 +59,7 @@ fn main() {
         process::exit(1);
     }
 
-    let action_plan = planner::plan_actions(files, &family);
+    let action_plan = planner::plan_actions(files);
     if args.dry_run {
         log::info!("User requested dry-run mode, not applying any changes");
     }

@@ -1,5 +1,5 @@
 use super::{destination, mode, parser};
-use crate::actions::{Action, Cause, Package};
+use crate::actions::{package_manager, Action, Cause, Package};
 use std::{
     convert::TryFrom,
     fs,
@@ -47,10 +47,11 @@ impl TryFrom<&PathBuf> for PetsFile {
             None => mode::Mode::default(),
         };
 
+        let family = package_manager::which();
         let pkgs = match modelines.get("package") {
             Some(pkgs) => pkgs
                 .split_whitespace()
-                .map(|pkg| Package::new(pkg.to_string()))
+                .map(|pkg| Package::new(pkg.to_string(), &family))
                 .collect(),
             None => Vec::new(),
         };

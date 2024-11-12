@@ -44,8 +44,8 @@ fn process_pets_file(path: &PathBuf) -> Result<Option<PetsFile>, ParseError> {
         Ok(pf) => Ok(Some(pf)),
         Err(error) => match error {
             ParseError::NotPetsFile => Ok(None),
-            ParseError::MissingDestFile(e) => {
-                log::error!("{}", e);
+            ParseError::MissingDestFile(path) => {
+                log::error!("{} is missing a desination or synlink directive", path);
                 Ok(None)
             }
             _ => Err(error),
