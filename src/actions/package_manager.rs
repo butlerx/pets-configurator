@@ -22,6 +22,12 @@ impl fmt::Display for Package {
     }
 }
 
+impl Into<String> for Package {
+    fn into(self) -> String {
+        self.name
+    }
+}
+
 // PackageManager available on the system. Apt on Debian-based distros, Yum on
 // RedHat and derivatives.
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]

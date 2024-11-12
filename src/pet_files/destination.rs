@@ -1,6 +1,10 @@
 use crate::actions::{Action, Cause};
+use home_dir::HomeDirExt;
 use sha2::{Digest, Sha256};
-use std::{fmt, fs, io, path::Path};
+use std::{
+    fmt, fs, io,
+    path::{Path, PathBuf},
+};
 
 // Sha256 returns the sha256 of the given file. Shocking, I know.
 fn sha256(file_name: &str) -> Result<String, io::Error> {
@@ -29,9 +33,13 @@ impl fmt::Display for Destination {
 
 impl From<&String> for Destination {
     fn from(dest: &String) -> Self {
+        let dest_path = match dest.expand_home() {
+            Ok(path) => path,
+            _ => PathBuf::from(dest),
+        };
         Self {
-            dest: dest.to_string(),
-            directory: Path::new(dest)
+            dest: dest_path.to_string_lossy().to_string(),
+            directory: dest_path
                 .parent()
                 .unwrap_or_else(|| Path::new(""))
                 .to_string_lossy()

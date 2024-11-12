@@ -77,16 +77,19 @@ pub fn plan_actions(files: Vec<PetsFile>, family: &PackageManager) -> Vec<action
         .collect::<HashSet<actions::package_manager::Package>>();
 
     // Generate the list of actions to perform.
-    let install_actions = Vec::from_iter(pkgs)
-        .is_empty()
-        .then(|| actions::package_manager::install_command(family))
-        .map(|install_command| actions::Action::new(actions::Cause::Pkg, install_command))
-        .into_iter();
-
     let trigger_actions = good_pets
         .iter()
-        .flat_map(Into::<Vec<actions::Action>>::into)
-        .collect::<Vec<_>>();
-
-    install_actions.chain(trigger_actions).collect()
+        .flat_map(Into::<Vec<actions::Action>>::into);
+    if pkgs.is_empty() {
+        trigger_actions.collect()
+    } else {
+        let install_command = actions::package_manager::install_command(family)
+            .into_iter()
+            .chain(pkgs.iter().map(|p| p.to_string()))
+            .collect();
+        vec![actions::Action::new(actions::Cause::Pkg, install_command)]
+            .into_iter()
+            .chain(trigger_actions)
+            .collect()
+    }
 }

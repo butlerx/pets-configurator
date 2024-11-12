@@ -261,7 +261,7 @@ impl PetsFile {
         // The action to (possibly) perform is a chown of the file.
         let action = Action::new(
             Cause::Owner,
-            vec!["/bin/chown".to_string(), arg.clone(), self.dest.to_string()],
+            vec!["chown".to_string(), arg.clone(), self.dest.to_string()],
         );
 
         let destination = self.dest.to_string();
@@ -323,7 +323,7 @@ impl PetsFile {
         let action = Action::new(
             Cause::Mode,
             vec![
-                "/bin/chmod".to_string(),
+                "chmod".to_string(),
                 self.mode.to_string(),
                 self.dest.to_string(),
             ],
