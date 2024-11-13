@@ -11,7 +11,7 @@ pub struct Package {
 impl Package {
     pub fn new(name: String, default_package_manager: &PackageManager) -> Self {
         let (name, package_manager) = match name.split_once(':') {
-            Some((name, manager)) => {
+            Some((manager, name)) => {
                 let package_manager = match manager {
                     "apt" => PackageManager::Apt,
                     "yum" => PackageManager::Yum,
@@ -181,13 +181,11 @@ impl Package {
             }
             PackageManager::Cargo => {
                 match Command::new("cargo").args(["install", "--list"]).output() {
-                    Ok(output) => str::from_utf8(&output.stdout)
-                        .unwrap_or_default()
-                        .lines()
-                        .filter(|line| !line.starts_with('\t') && !line.starts_with(' '))
-                        .filter_map(|line| line.split_once(" v").map(|(name, _)| name.to_string()))
-                        .collect::<Vec<String>>()
-                        .contains(&self.name),
+                    Ok(output) => {
+                        let std_our = str::from_utf8(&output.stdout).unwrap_or_default();
+                        let installed = parse_cargo_installed(std_our);
+                        installed.contains(&self.name)
+                    }
                     Err(err) => {
                         log::error!("running cargo install --list: {}", err);
                         false
@@ -198,9 +196,23 @@ impl Package {
     }
 }
 
+fn parse_cargo_installed(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .filter(|line| !line.starts_with('\t') && !line.starts_with(' '))
+        .filter_map(|line| line.split_once(" v").map(|(name, _)| name.to_string()))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_pkg_manager_specified() {
+        let pkg = Package::new("cargo:exa".to_string(), &PackageManager::Apt);
+        assert_eq!(pkg.package_manager, PackageManager::Cargo);
+    }
 
     #[test]
     fn test_pkg_is_valid() {
@@ -227,6 +239,28 @@ mod tests {
     fn test_is_not_installed() {
         let pkg = Package::new("abiword".to_string(), &PackageManager::Apt);
         assert!(!pkg.is_installed());
+    }
+
+    #[test]
+    fn test_parse_cargo_installed() {
+        let output = "
+alacritty v0.13.2:
+    alacritty
+cargo-machete v0.6.2:
+    cargo-machete
+cargo-workspaces v0.2.44:
+    cargo-workspaces
+    cargo-ws
+exa v0.10.1:
+    exa
+";
+        let installed = parse_cargo_installed(output);
+        assert_eq!(
+            installed,
+            vec!["alacritty", "cargo-machete", "cargo-workspaces", "exa"]
+        );
+        assert!(installed.contains(&"exa".to_string()));
+        assert!(!installed.contains(&"non-existent-package".to_string()));
     }
 
     #[test]
