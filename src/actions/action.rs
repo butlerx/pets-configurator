@@ -1,4 +1,4 @@
-use super::Cause;
+use super::{ActionError, Cause};
 use std::{fmt, process::Command};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -18,10 +18,10 @@ impl Action {
         Action { cause, command }
     }
 
-    pub fn perform(self, dry_run: bool) -> std::io::Result<()> {
+    pub fn perform(self, dry_run: bool) -> Result<i32, ActionError> {
         log::info!("Running {}", self.command.join(" "));
         if dry_run {
-            return Ok(());
+            return Ok(1);
         }
 
         let mut command = Command::new(&self.command[0]);
@@ -39,14 +39,21 @@ impl Action {
             );
         }
 
-        if !output.stderr.is_empty() {
-            log::error!(
-                "Error: {} => {}",
-                self.command[0],
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
+        let status = output.status.code().unwrap_or(1);
 
-        Ok(())
+        if !output.status.success() {
+            let std_err = if output.stderr.is_empty() {
+                "No error message".to_string()
+            } else {
+                String::from_utf8_lossy(&output.stderr).to_string()
+            };
+
+            return Err(ActionError::ExecError(
+                self.command[0].clone(),
+                status,
+                std_err,
+            ));
+        }
+        Ok(status)
     }
 }

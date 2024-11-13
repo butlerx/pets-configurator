@@ -80,7 +80,9 @@ directories as you want, call them what you want, and so on.
 - `group` -- the group this file belongs to, passed to `chgrp`
 - `mode` -- octal mode for `chmod`
 - `package` -- which package to install before creating the file. This directive
-  can be specified more than once to install multiple packages.
+  can be specified more than once to install multiple packages. $The package
+  manager can be specified by prepending it the package with the name of the
+  package manager and a colon. Eg: `cargo:exa` would use cargo to install exa
 - `pre` -- validation command. This must succeed for the file to be
   created/updated.
 - `post` -- apply command. Usually something like reloading a service.

@@ -1,5 +1,3 @@
-// Pets configuration parser. Walk through a Pets directory and parse
-// modelpub use parser::ParseError;se crate::package_manager::PetsPackage;
 use std::{
     collections::HashMap,
     fs::File,

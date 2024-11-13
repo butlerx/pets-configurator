@@ -51,6 +51,10 @@ fn main() {
     });
 
     log::info!("Found {} pets configuration files", files.len());
+    if files.is_empty() {
+        log::info!("No pets configuration files found, exiting");
+        process::exit(0);
+    }
 
     // Config validator
     if let Err(global_errors) = planner::check_global_constraints(&files) {
@@ -73,10 +77,24 @@ fn main() {
     // - which post-update commands will be executed
     let mut exit_status = 0;
     for action in action_plan {
-        if let Err(err) = action.perform(args.dry_run) {
-            log::error!("Error performing action: {}", err);
-            exit_status = 1;
-            break;
+        match action.perform(args.dry_run) {
+            Ok(status) if status != 0 => {
+                exit_status = status;
+                break;
+            }
+            Err(err) => match err {
+                actions::ActionError::ExecError(cmd, status, err) => {
+                    log::error!("Error: {} exited with {} => {}", cmd, status, err);
+                    exit_status = status;
+                    break;
+                }
+                err => {
+                    log::error!("Error performing action: {}", err);
+                    exit_status = 1;
+                    break;
+                }
+            },
+            _ => continue,
         }
     }
 

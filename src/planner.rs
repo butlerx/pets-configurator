@@ -4,7 +4,7 @@
 // commands must succeed.
 
 use crate::{
-    actions::{self, package_manager::PackageManager},
+    actions::{self, package_manager::PackageManager, Package},
     pet_files::PetsFile,
 };
 use std::{
@@ -78,7 +78,7 @@ pub fn plan_actions(files: Vec<PetsFile>) -> Vec<actions::Action> {
                 .filter(|pkg| !pkg.is_installed())
                 .map(std::clone::Clone::clone)
         })
-        .collect::<HashSet<actions::package_manager::Package>>();
+        .collect::<HashSet<Package>>();
 
     // Generate the list of actions to perform.
     let trigger_actions = good_pets
