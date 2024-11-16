@@ -1,17 +1,18 @@
+use super::parser::ParseError;
 use crate::actions::{Action, Cause};
 use home_dir::HomeDirExt;
-use sha2::{Digest, Sha256};
+use merkle_hash::{Algorithm, MerkleTree};
 use std::{
     fmt, fs, io,
     path::{Path, PathBuf},
 };
 
-// Sha256 returns the sha256 of the given file. Shocking, I know.
-fn sha256(file_name: &str) -> Result<String, io::Error> {
-    let mut file = fs::File::open(file_name)?;
-    let mut hasher = Sha256::new();
-    io::copy(&mut file, &mut hasher)?;
-    Ok(format!("{:x}", hasher.finalize()))
+/// returns the sha256 of the given path.
+fn sha256(path: &str) -> Result<Vec<u8>, ParseError> {
+    let tree = MerkleTree::builder(path)
+        .algorithm(Algorithm::Sha256)
+        .build()?;
+    Ok(tree.root.item.hash)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -23,29 +24,12 @@ pub struct Destination {
     directory: String,
     // Is this a symbolic link or an actual file to be copied?
     link: bool,
+    is_dir: bool,
 }
 
 impl fmt::Display for Destination {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.dest)
-    }
-}
-
-impl From<&String> for Destination {
-    fn from(dest: &String) -> Self {
-        let dest_path = match dest.expand_home() {
-            Ok(path) => path,
-            _ => PathBuf::from(dest),
-        };
-        Self {
-            dest: dest_path.to_string_lossy().to_string(),
-            directory: dest_path
-                .parent()
-                .unwrap_or_else(|| Path::new(""))
-                .to_string_lossy()
-                .to_string(),
-            link: false,
-        }
     }
 }
 
@@ -56,10 +40,21 @@ impl From<Destination> for String {
 }
 
 impl Destination {
-    pub fn link(dest: &String) -> Self {
-        let mut d = Self::from(dest);
-        d.link = true;
-        d
+    pub fn new(dest: &String, is_symlink: bool, is_dir: bool) -> Self {
+        let mut dest_path = match dest.expand_home() {
+            Ok(path) => path,
+            _ => PathBuf::from(dest),
+        };
+        if is_dir {
+            dest_path.pop();
+        }
+        let directory = dest_path.parent().unwrap_or_else(|| Path::new(""));
+        Self {
+            dest: dest_path.to_string_lossy().to_string(),
+            directory: directory.to_string_lossy().to_string(),
+            link: is_symlink,
+            is_dir,
+        }
     }
 
     pub fn directory(&self) -> String {
@@ -67,7 +62,7 @@ impl Destination {
     }
 
     /// figures out if a symbolic link needs to be created, and returns the corresponding `Action`
-    /// With Cause Link and  source as target and dest as `Link_Name` needs to be created.
+    /// With `Cause::Link` and source as target and dest as link name needs to be created.
     pub fn needs_link(&self, source: &str) -> Option<Action> {
         if !self.link || self.dest.is_empty() {
             return None;
@@ -167,6 +162,16 @@ impl Destination {
             return None;
         }
 
+        let command = vec![
+            String::from("cp"),
+            source.to_string(),
+            self.dest.to_string(),
+        ];
+
+        if !Path::new(&self.dest).exists() {
+            return Some(Action::new(Cause::Create, command));
+        }
+
         let sha_source = match sha256(source) {
             Ok(hash) => hash,
             Err(err) => {
@@ -175,17 +180,11 @@ impl Destination {
             }
         };
 
-        let command = vec![
-            String::from("cp"),
-            source.to_string(),
-            self.dest.to_string(),
-        ];
-
         match sha256(&self.dest) {
             Ok(sha_dest) => {
                 if sha_source == sha_dest {
                     log::debug!(
-                        "same sha256 for {} and {}: {}",
+                        "same sha256 for {} and {}: {:#?}",
                         source,
                         self.dest,
                         sha_source
@@ -193,16 +192,13 @@ impl Destination {
                     return None;
                 }
                 log::debug!(
-                    "sha256[{}]={} != sha256[{}]={}",
+                    "sha256[{}]={:#?} != sha256[{}]={:#?}",
                     source,
                     sha_source,
                     self.dest,
                     sha_dest
                 );
                 Some(Action::new(Cause::Update, command))
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                Some(Action::new(Cause::Create, command))
             }
             Err(err) => {
                 log::error!(
@@ -230,21 +226,39 @@ mod tests {
         fs::write(&file_path, content).unwrap();
 
         let hash_result = sha256(file_path.to_str().unwrap()).unwrap();
-        let expected_hash = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+        let expected_hash = vec![
+            185, 77, 39, 185, 147, 77, 62, 8, 165, 46, 82, 215, 218, 125, 171, 250, 196, 132, 239,
+            227, 122, 83, 128, 238, 144, 136, 247, 172, 226, 239, 205, 233,
+        ];
 
         assert_eq!(hash_result, expected_hash);
     }
 
     #[test]
-    fn test_destination_display() {
-        let dest = Destination::from(&"test/path".to_string());
-        assert_eq!(format!("{dest}"), "test/path");
+    fn test_hashing_directory() {
+        let dir = tempdir().unwrap();
+
+        let file_path = dir.path().join("test_file.txt");
+        let content = b"hello world";
+        fs::write(&file_path, content).unwrap();
+
+        let file_path = dir.path().join("test_file_2.txt");
+        let content = b"foo bar";
+        fs::write(&file_path, content).unwrap();
+
+        let hash_result = sha256(dir.path().to_str().unwrap()).unwrap();
+        let expected_hash = vec![
+            45, 234, 137, 234, 49, 226, 240, 50, 76, 129, 183, 24, 42, 128, 162, 2, 43, 131, 207,
+            219, 6, 247, 126, 228, 158, 131, 94, 24, 123, 55, 202, 79,
+        ];
+
+        assert_eq!(hash_result, expected_hash);
     }
 
     #[test]
     fn test_destination_from_string_conversion() {
         let dest_path = "test/path".to_string();
-        let dest = Destination::from(&dest_path);
+        let dest = Destination::new(&dest_path, false, false);
 
         assert_eq!(dest.dest, dest_path);
         assert_eq!(dest.directory, "test");
@@ -257,7 +271,7 @@ mod tests {
         let dest_path = dir.path().join("link_path").to_str().unwrap().to_string();
         let source_path = dir.path().join("source_file").to_str().unwrap().to_string();
 
-        let dest = Destination::link(&dest_path);
+        let dest = Destination::new(&dest_path, true, false);
 
         // The link does not exist yet, so needs_link should return Cause::Link
         assert_eq!(
@@ -284,7 +298,7 @@ mod tests {
         File::create(&source_path).unwrap();
         std::os::unix::fs::symlink(&source_path, &dest_path).unwrap();
 
-        let dest = Destination::link(&dest_path.to_str().unwrap().to_string());
+        let dest = Destination::new(&dest_path.to_str().unwrap().to_string(), true, false);
         assert_eq!(dest.needs_link(source_path.to_str().unwrap()), None);
     }
 
@@ -292,7 +306,7 @@ mod tests {
     fn test_destination_needs_dir_creation() {
         let dir = tempdir().unwrap();
         let dest_path = dir.path().join("non_existing_dir/path");
-        let dest = Destination::from(&dest_path.to_str().unwrap().to_string());
+        let dest = Destination::new(&dest_path.to_str().unwrap().to_string(), false, false);
 
         // needs_dir should return Cause::Dir because the directory does not exist
         assert_eq!(
@@ -313,7 +327,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let existing_dir = dir.path().join("existing_dir");
         fs::create_dir(&existing_dir).unwrap();
-        let dest = Destination::from(&existing_dir.to_str().unwrap().to_string());
+        let dest = Destination::new(&existing_dir.to_str().unwrap().to_string(), false, false);
 
         // needs_dir should return Cause::None because the directory already exists
         assert_eq!(dest.needs_dir(), None);
@@ -326,7 +340,7 @@ mod tests {
         fs::write(&source_file, b"content").unwrap();
 
         let dest_file = dir.path().join("dest_file.txt");
-        let dest = Destination::from(&dest_file.to_str().unwrap().to_string());
+        let dest = Destination::new(&dest_file.to_str().unwrap().to_string(), false, false);
 
         // Destination file does not exist, so needs_copy should return Cause::Create
         assert_eq!(
@@ -352,7 +366,7 @@ mod tests {
         fs::write(&source_file, b"new content").unwrap();
         fs::write(&dest_file, b"old content").unwrap();
 
-        let dest = Destination::from(&dest_file.to_str().unwrap().to_string());
+        let dest = Destination::new(&dest_file.to_str().unwrap().to_string(), false, false);
 
         // Destination exists and content is different, so needs_copy should return Cause::Update
         assert_eq!(
@@ -378,7 +392,7 @@ mod tests {
         fs::write(&source_file, b"same content").unwrap();
         fs::write(&dest_file, b"same content").unwrap();
 
-        let dest = Destination::from(&dest_file.to_str().unwrap().to_string());
+        let dest = Destination::new(&dest_file.to_str().unwrap().to_string(), false, false);
 
         // Destination exists and content is identical, so needs_copy should return Cause::None
         assert_eq!(dest.needs_copy(source_file.to_str().unwrap()), None);

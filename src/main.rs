@@ -11,7 +11,7 @@ mod planner;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Pets configuration directory
-    #[arg(long, default_value_t = default_conf_dir())]
+    #[arg(long, alias="c", default_value_t = default_conf_dir())]
     conf_dir: String,
 
     /// Show debugging output
@@ -88,7 +88,7 @@ fn main() {
                     exit_status = status;
                     break;
                 }
-                err => {
+                actions::ActionError::IoError(err) => {
                     log::error!("Error performing action: {}", err);
                     exit_status = 1;
                     break;

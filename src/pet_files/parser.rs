@@ -20,6 +20,8 @@ pub enum ParseError {
     MissingDestFile(String),
     #[error("Invalid file mode: {0}")]
     InvalidFileMode(String),
+    #[error("Error hashing source file: {0}")]
+    HashError(#[from] merkle_hash::error::IndexingError),
 }
 
 // looks into the given file and searches for pets modelines.

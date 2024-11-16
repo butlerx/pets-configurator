@@ -1,5 +1,5 @@
-# pets: package=vim
-# pets: symlink=/root/.vimrc
+; pets: package=vim
+; pets: symlink=/root/.vimrc
 
 syntax on
 set expandtab

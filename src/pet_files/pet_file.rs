@@ -29,15 +29,19 @@ impl TryFrom<&PathBuf> for PetsFile {
             return Err(parser::ParseError::NotPetsFile);
         }
         log::debug!("{} pets modelines found in {:?}", modelines.len(), path);
-        //
+
         // Get absolute path to the source.
         let abs = fs::canonicalize(path)?;
         let source = abs.to_string_lossy().into_owned();
+        let is_petfile = match abs.file_name() {
+            Some(file_name) => file_name.to_string_lossy().to_lowercase() == ".petfile",
+            _ => false,
+        };
 
         let dest = match modelines.get("destfile") {
-            Some(dest) => destination::Destination::from(dest),
+            Some(dest) => destination::Destination::new(dest, false, is_petfile),
             None => match modelines.get("symlink") {
-                Some(dest) => destination::Destination::link(dest),
+                Some(dest) => destination::Destination::new(dest, true, is_petfile),
                 None => return Err(parser::ParseError::MissingDestFile(source)),
             },
         };
