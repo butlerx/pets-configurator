@@ -39,22 +39,22 @@ impl TryFrom<&PathBuf> for PetsFile {
         };
 
         let dest = match modelines.get("destfile") {
-            Some(dest) => destination::Destination::new(dest, false, is_petfile),
+            Some(dest) => destination::Destination::new(&dest[0], false, is_petfile),
             None => match modelines.get("symlink") {
-                Some(dest) => destination::Destination::new(dest, true, is_petfile),
+                Some(dest) => destination::Destination::new(&dest[0], true, is_petfile),
                 None => return Err(parser::ParseError::MissingDestFile(source)),
             },
         };
 
         let mode = match modelines.get("mode") {
-            Some(mode) => mode::Mode::try_from(mode)?,
+            Some(mode) => mode::Mode::try_from(&mode[0])?,
             None => mode::Mode::default(),
         };
 
         let family = package_manager::which();
         let pkgs = match modelines.get("package") {
             Some(pkgs) => pkgs
-                .split_whitespace()
+                .iter()
                 .map(|pkg| Package::new(pkg.to_string(), &family))
                 .collect(),
             None => Vec::new(),
@@ -62,11 +62,11 @@ impl TryFrom<&PathBuf> for PetsFile {
 
         let user = match modelines.get("owner") {
             Some(user) => {
-                if let Some(user) = users::get_user_by_name(user) {
+                if let Some(user) = users::get_user_by_name(&user[0]) {
                     Some(user)
                 } else {
                     // TODO: one day we may add support for creating users
-                    log::error!("unknown 'owner' {}, skipping directive", user);
+                    log::error!("unknown 'owner' {}, skipping directive", user[0]);
                     None
                 }
             }
@@ -75,11 +75,11 @@ impl TryFrom<&PathBuf> for PetsFile {
 
         let group = match modelines.get("group") {
             Some(group) => {
-                if let Some(group) = users::get_group_by_name(group) {
+                if let Some(group) = users::get_group_by_name(&group[0]) {
                     Some(group)
                 } else {
                     // TODO: one day we may add support for creating groups
-                    log::error!("unknown 'group' {}, skipping directive", group);
+                    log::error!("unknown 'group' {}, skipping directive", &group[0]);
                     None
                 }
             }
@@ -89,7 +89,7 @@ impl TryFrom<&PathBuf> for PetsFile {
         let pre = modelines
             .get("pre")
             .map(|pre| {
-                let pre_args = pre
+                let pre_args = pre[0]
                     .split_whitespace()
                     .map(std::string::ToString::to_string)
                     .collect::<Vec<String>>();
@@ -104,7 +104,7 @@ impl TryFrom<&PathBuf> for PetsFile {
         let post = modelines
             .get("post")
             .map(|post| {
-                let post_args = post
+                let post_args = post[0]
                     .split_whitespace()
                     .map(std::string::ToString::to_string)
                     .collect::<Vec<String>>();

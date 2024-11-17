@@ -11,7 +11,7 @@ mod planner;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Pets configuration directory
-    #[arg(long, alias="c", default_value_t = default_conf_dir())]
+    #[arg(short, long, default_value_t = default_conf_dir())]
     conf_dir: String,
 
     /// Show debugging output

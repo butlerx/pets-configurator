@@ -18,7 +18,7 @@ impl<P: AsRef<Path>> DirectoryWalker<P> {
     fn into_iter(self) -> impl Iterator<Item = Result<PathBuf, ParseError>> {
         WalkDir::new(self.directory)
             .into_iter()
-            .filter_map(|entry| entry.ok())
+            .filter_map(std::result::Result::ok)
             .map(|entry| entry.path().to_owned())
             .filter(|path| path.is_file())
             .map(Ok)
@@ -42,8 +42,8 @@ fn process_pets_file(path: &PathBuf) -> Result<Option<PetsFile>, ParseError> {
         Ok(pf) => Ok(Some(pf)),
         Err(error) => match error {
             ParseError::NotPetsFile => Ok(None),
-            ParseError::MissingDestFile(path) => {
-                log::error!("{} is missing a desination or synlink directive", path);
+            ParseError::MissingDestFile(_) => {
+                log::error!("{error}");
                 Ok(None)
             }
             _ => Err(error),
@@ -54,8 +54,10 @@ fn process_pets_file(path: &PathBuf) -> Result<Option<PetsFile>, ParseError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::{self, File};
-    use std::io::Write;
+    use std::{
+        fs::{self, File},
+        io::Write,
+    };
     use tempfile::TempDir;
 
     #[test]
@@ -88,7 +90,7 @@ mod tests {
         // Write all files
         for (path, content) in valid_pets.iter().chain(non_pets.iter()) {
             let mut file = File::create(path).unwrap();
-            writeln!(file, "{}", content).unwrap();
+            writeln!(file, "{content}").unwrap();
         }
 
         let walker = DirectoryWalker::new(temp_dir.path());
