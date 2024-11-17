@@ -30,21 +30,31 @@ pub enum ParseError {
 // # pets: destfile=/etc/ssh/sshd_config, owner=root, group=root, mode=0644
 // All modelines found are returned Key=Value pairs in a Vec.
 pub fn read_modelines<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Vec<String>>, ParseError> {
+    log::debug!("Reading modelines from file '{:?}'", path.as_ref());
     let file = File::open(path)?;
     let reader = io::BufReader::new(file);
 
     let mut result = HashMap::new();
     for line in reader.lines() {
-        let line = line?;
-        if line.contains("pets:") {
-            let modeline = extract_modeline(line)?;
-            for r in parse_multiple_key_value(&modeline) {
-                match r {
-                    Ok((k, v)) => {
-                        result.entry(k).or_insert_with(Vec::new).push(v);
-                    }
-                    Err(e) => return Err(e),
+        let line = match line {
+            Ok(line) if line.contains("pets:") => line,
+            Ok(_) => continue,
+            Err(e) => match e.kind() {
+                io::ErrorKind::InvalidData => {
+                    log::debug!("Invalid UTF-8 data in file, skipping file");
+                    return Ok(result);
                 }
+                _ => return Err(e.into()),
+            },
+        };
+
+        let modeline = extract_modeline(line)?;
+        for r in parse_multiple_key_value(&modeline) {
+            match r {
+                Ok((k, v)) => {
+                    result.entry(k).or_insert_with(Vec::new).push(v);
+                }
+                Err(e) => return Err(e),
             }
         }
     }

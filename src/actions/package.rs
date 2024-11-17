@@ -40,6 +40,11 @@ impl fmt::Display for Package {
 
 impl Package {
     fn get_pkg_info(&self) -> String {
+        log::debug!(
+            "Getting package info for {} from {}",
+            self.name,
+            self.package_manager
+        );
         let mut pkg_info_cmd = match self.package_manager {
             PackageManager::Apt => {
                 let mut apt_cache = Command::new("apt-cache");

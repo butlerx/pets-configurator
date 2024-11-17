@@ -3,7 +3,7 @@ use std::{
     convert::AsRef,
     path::{Path, PathBuf},
 };
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 #[derive(Debug)]
 pub struct DirectoryWalker<P: AsRef<Path>> {
@@ -18,6 +18,7 @@ impl<P: AsRef<Path>> DirectoryWalker<P> {
     fn into_iter(self) -> impl Iterator<Item = Result<PathBuf, ParseError>> {
         WalkDir::new(self.directory)
             .into_iter()
+            .filter_entry(|e| !is_git_dir(e))
             .filter_map(std::result::Result::ok)
             .map(|entry| entry.path().to_owned())
             .filter(|path| path.is_file())
@@ -35,6 +36,14 @@ impl<P: AsRef<Path>> DirectoryWalker<P> {
             .filter_map(|path| process_pets_file(&path).transpose())
             .collect()
     }
+}
+
+fn is_git_dir(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.starts_with(".git"))
+        .unwrap_or(false)
 }
 
 fn process_pets_file(path: &PathBuf) -> Result<Option<PetsFile>, ParseError> {
