@@ -93,6 +93,11 @@ fn main() {
                     exit_status = 1;
                     break;
                 }
+                _ => {
+                    log::error!("Unknown error: {}", err);
+                    exit_status = 1;
+                    break;
+                }
             },
             _ => continue,
         }

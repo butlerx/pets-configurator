@@ -29,7 +29,13 @@ impl Action {
         if self.cause == Cause::Pkg {
             command.env("DEBIAN_FRONTEND", "noninteractive");
         }
-        let output = command.output()?;
+        let output = match command.output() {
+            Ok(output) => output,
+            // if the package manger is not found, return Ok(0)
+            // TODO filter these sooner
+            Err(_) if self.cause == Cause::Pkg => return Ok(0),
+            Err(err) => return Err(ActionError::IoError(err)),
+        };
 
         if !output.stdout.is_empty() {
             log::info!(

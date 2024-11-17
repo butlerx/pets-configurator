@@ -42,8 +42,7 @@ fn is_git_dir(entry: &DirEntry) -> bool {
     entry
         .file_name()
         .to_str()
-        .map(|s| s.starts_with(".git"))
-        .unwrap_or(false)
+        .is_some_and(|s| s.starts_with(".git"))
 }
 
 fn process_pets_file(path: &PathBuf) -> Result<Option<PetsFile>, ParseError> {

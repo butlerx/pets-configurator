@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn test_mode_is_empty() {
-        let empty_mode = Mode("".to_string());
+        let empty_mode = Mode(String::new());
         let non_empty_mode = Mode("644".to_string());
 
         assert!(empty_mode.is_empty());

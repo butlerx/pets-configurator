@@ -1,5 +1,5 @@
 use super::{destination, mode, parser};
-use crate::actions::{package_manager, Action, Cause, Package};
+use crate::actions::{package_manager, Action, ActionError, Cause, Package};
 use std::{
     convert::TryFrom,
     fs,
@@ -66,8 +66,8 @@ impl TryFrom<&PathBuf> for PetsFile {
                     Some(user)
                 } else {
                     // TODO: one day we may add support for creating users
-                    log::error!("unknown 'owner' {}, skipping directive", user[0]);
-                    None
+                    log::warn!("unknown 'owner' {}, skipping directive", user[0]);
+                    users::get_user_by_uid(users::get_current_uid())
                 }
             }
             None => users::get_user_by_uid(users::get_current_uid()),
@@ -79,8 +79,8 @@ impl TryFrom<&PathBuf> for PetsFile {
                     Some(group)
                 } else {
                     // TODO: one day we may add support for creating groups
-                    log::error!("unknown 'group' {}, skipping directive", &group[0]);
-                    None
+                    log::warn!("unknown 'group' {}, skipping directive", &group[0]);
+                    users::get_group_by_gid(users::get_current_gid())
                 }
             }
             None => users::get_group_by_gid(users::get_current_gid()),
@@ -149,13 +149,12 @@ impl PetsFile {
         log::debug!("validating {}", self.source);
         // Check if the specified package(s) exists
         for pkg in &self.pkgs {
-            if !pkg.is_valid() {
-                log::error!(
-                    "Invalid configuration file, package {} not found for {}",
-                    pkg,
-                    self.source
-                );
-                return false;
+            match pkg.is_valid() {
+                Ok(()) => continue,
+                Err(err) => if let ActionError::NoPackageManager = err { continue } else {
+                    log::error!("Invalid configuration file, {}", err);
+                    return false;
+                },
             }
         }
 

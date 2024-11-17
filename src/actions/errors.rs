@@ -1,3 +1,4 @@
+use super::package_manager::PackageManager;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -6,4 +7,8 @@ pub enum ActionError {
     ExecError(String, i32, String),
     #[error("IO error running command: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("Package manger not installed")]
+    NoPackageManager,
+    #[error("Package not found {0} in {1}")]
+    PackageNotFound(String, PackageManager),
 }
