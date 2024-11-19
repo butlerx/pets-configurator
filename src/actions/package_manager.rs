@@ -44,7 +44,7 @@ impl str::FromStr for PackageManager {
 
 impl PackageManager {
     // returns the command needed to install packages on this system.
-    pub fn install_command(self) -> Vec<String> {
+    pub fn install_command(&self) -> Vec<String> {
         match self {
             PackageManager::Apt => vec![
                 "apt-get".to_string(),
@@ -65,6 +65,13 @@ impl PackageManager {
             ],
             PackageManager::Cargo => vec!["cargo".to_string(), "install".to_string()],
         }
+    }
+
+    pub fn requires_sudo(&self) -> bool {
+        matches!(
+            self,
+            PackageManager::Apt | PackageManager::Yum | PackageManager::Pacman
+        )
     }
 }
 

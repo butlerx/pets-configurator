@@ -5,6 +5,7 @@ use std::{fmt, process::Command};
 pub struct Action {
     cause: Cause,
     command: Vec<String>,
+    requires_sudo: bool,
 }
 
 impl fmt::Display for Action {
@@ -15,7 +16,19 @@ impl fmt::Display for Action {
 
 impl Action {
     pub fn new(cause: Cause, command: Vec<String>) -> Self {
-        Action { cause, command }
+        Action {
+            cause,
+            command,
+            requires_sudo: false,
+        }
+    }
+
+    pub fn with_sudo(cause: Cause, command: Vec<String>) -> Self {
+        Action {
+            cause,
+            command,
+            requires_sudo: true,
+        }
     }
 
     pub fn perform(self, dry_run: bool) -> Result<i32, ActionError> {
@@ -24,8 +37,17 @@ impl Action {
             return Ok(1);
         }
 
-        let mut command = Command::new(&self.command[0]);
-        command.args(&self.command[1..]);
+        let mut command = if self.requires_sudo {
+            let mut cmd = Command::new("sudo");
+            cmd.arg(&self.command[0]);
+            cmd.args(&self.command[1..]);
+            cmd
+        } else {
+            let mut cmd = Command::new(&self.command[0]);
+            cmd.args(&self.command[1..]);
+            cmd
+        };
+
         if self.cause == Cause::Pkg {
             command.env("DEBIAN_FRONTEND", "noninteractive");
         }

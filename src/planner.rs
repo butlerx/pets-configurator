@@ -102,13 +102,16 @@ pub fn plan_actions(files: Vec<PetsFile>) -> Vec<actions::Action> {
             .map(|(pkg_manager, packages)| {
                 let pkg_manager = PackageManager::from_str(pkg_manager).unwrap();
                 let install_vec = pkg_manager.install_command();
-                actions::Action::new(
-                    actions::Cause::Pkg,
-                    install_vec
-                        .into_iter()
-                        .chain(packages.iter().map(ToString::to_string))
-                        .collect(),
-                )
+
+                let packages_to_isntall = install_vec
+                    .into_iter()
+                    .chain(packages.iter().map(ToString::to_string))
+                    .collect();
+                if pkg_manager.requires_sudo() {
+                    actions::Action::with_sudo(actions::Cause::Pkg, packages_to_isntall)
+                } else {
+                    actions::Action::new(actions::Cause::Pkg, packages_to_isntall)
+                }
             })
             .chain(trigger_actions)
             .collect()
