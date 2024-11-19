@@ -77,7 +77,7 @@ pub fn plan_actions(files: Vec<PetsFile>) -> Vec<actions::Action> {
                 .iter()
                 .filter(|pkg| match pkg.is_installed() {
                     Ok(b) => !b,
-                    Err(e) => matches!(e, actions::ActionError::NoPackageManager),
+                    Err(e) => !matches!(e, actions::ActionError::NoPackageManager),
                 })
                 .map(std::clone::Clone::clone)
         })

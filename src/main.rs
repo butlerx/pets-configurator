@@ -103,6 +103,9 @@ fn main() {
         }
     }
 
-    log::info!("Pets run took {:?}", start_time.elapsed());
+    log::info!(
+        "Pets run took {:.2} seconds",
+        start_time.elapsed().as_secs_f64()
+    );
     process::exit(exit_status);
 }

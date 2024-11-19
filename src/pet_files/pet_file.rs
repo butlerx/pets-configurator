@@ -33,15 +33,15 @@ impl TryFrom<&PathBuf> for PetsFile {
         // Get absolute path to the source.
         let abs = fs::canonicalize(path)?;
         let source = abs.to_string_lossy().into_owned();
-        let is_petfile = match abs.file_name() {
-            Some(file_name) => file_name.to_string_lossy().to_lowercase() == ".petfile",
+        let is_petsfile = match abs.file_name() {
+            Some(file_name) => file_name.to_string_lossy().to_lowercase() == ".petsfile",
             _ => false,
         };
 
         let dest = match modelines.get("destfile") {
-            Some(dest) => destination::Destination::new(&dest[0], false, is_petfile),
+            Some(dest) => destination::Destination::new(&dest[0], false, is_petsfile),
             None => match modelines.get("symlink") {
-                Some(dest) => destination::Destination::new(&dest[0], true, is_petfile),
+                Some(dest) => destination::Destination::new(&dest[0], true, is_petsfile),
                 None => return Err(parser::ParseError::MissingDestFile(source)),
             },
         };
@@ -151,10 +151,14 @@ impl PetsFile {
         for pkg in &self.pkgs {
             match pkg.is_valid() {
                 Ok(()) => continue,
-                Err(err) => if let ActionError::NoPackageManager = err { continue } else {
-                    log::error!("Invalid configuration file, {}", err);
-                    return false;
-                },
+                Err(err) => {
+                    if let ActionError::NoPackageManager = err {
+                        continue;
+                    } else {
+                        log::error!("Invalid configuration file, {}", err);
+                        return false;
+                    }
+                }
             }
         }
 
@@ -270,7 +274,7 @@ impl PetsFile {
 
         let destination = self.dest.to_string();
         // stat() the destination file to see if a chown is needed
-        let file_info = match fs::metadata(&destination) {
+        let stat = match fs::metadata(&destination) {
             Ok(info) => info,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 // If the destination file is not there yet, prepare a chown for later on.
@@ -282,15 +286,16 @@ impl PetsFile {
             }
         };
 
-        // Get the file ownership details from the metadata
-        let stat = file_info;
+        let stat_uid = stat.uid();
+        let stat_gid = stat.gid();
 
+        // Get the file ownership details from the metadata
         if let Some(want_uid) = want_user_id {
-            if stat.uid() != want_uid {
+            if stat_uid != want_uid {
                 log::info!(
                     "{} is owned by uid {} instead of {}",
                     destination,
-                    stat.uid(),
+                    stat_uid,
                     want_uid
                 );
                 return Some(action);
@@ -298,11 +303,11 @@ impl PetsFile {
         }
 
         if let Some(want_gid) = want_group_id {
-            if stat.gid() != want_gid {
+            if stat_gid != want_gid {
                 log::info!(
                     "{} is owned by gid {} instead of {}",
                     destination,
-                    stat.gid(),
+                    stat_gid,
                     want_gid
                 );
                 return Some(action);
@@ -312,8 +317,8 @@ impl PetsFile {
         log::debug!(
             "{} is owned by {}:{} already",
             destination,
-            stat.uid(),
-            stat.gid()
+            stat_uid,
+            stat_gid
         );
         None
     }
@@ -348,19 +353,12 @@ impl PetsFile {
         let old_mode = file_info.permissions().mode();
 
         // See if the desired mode and reality differ.
-        match self.mode.as_u32() {
-            Ok(new_mode) if old_mode == new_mode => {
-                log::info!("{} is {:o} already", self.dest, new_mode);
-                None
-            }
-            Ok(new_mode) => {
-                log::info!("{} is {:o} instead of {:o}", self.dest, old_mode, new_mode);
-                Some(action)
-            }
-            Err(e) => {
-                log::error!("unexpected error in chmod(): {}", e);
-                None
-            }
+        if self.mode == old_mode {
+            log::debug!("{} is {} already", self.dest, self.mode);
+            None
+        } else {
+            log::info!("{} is {:o} instead of {}", self.dest, old_mode, self.mode);
+            Some(action)
         }
     }
 }

@@ -41,13 +41,10 @@ impl From<Destination> for String {
 
 impl Destination {
     pub fn new(dest: &String, is_symlink: bool, is_dir: bool) -> Self {
-        let mut dest_path = match dest.expand_home() {
+        let dest_path = match dest.expand_home() {
             Ok(path) => path,
             _ => PathBuf::from(dest),
         };
-        if is_dir {
-            dest_path.pop();
-        }
         let directory = dest_path.parent().unwrap_or_else(|| Path::new(""));
         Self {
             dest: dest_path.to_string_lossy().to_string(),
@@ -55,6 +52,10 @@ impl Destination {
             link: is_symlink,
             is_dir,
         }
+    }
+
+    pub fn is_symlink(&self) -> bool {
+        self.link
     }
 
     pub fn directory(&self) -> String {
@@ -67,6 +68,14 @@ impl Destination {
         if !self.link || self.dest.is_empty() {
             return None;
         }
+
+        let source = if self.is_dir {
+            let mut file = PathBuf::from(source);
+            file.pop();
+            file.to_string_lossy().to_string()
+        } else {
+            source.to_string()
+        };
 
         match fs::symlink_metadata(&self.dest) {
             Ok(metadata) => {
@@ -104,7 +113,7 @@ impl Destination {
                     vec![
                         String::from("ln"),
                         String::from("-s"),
-                        source.to_string(),
+                        source,
                         self.dest.to_string(),
                     ],
                 ))
@@ -162,17 +171,21 @@ impl Destination {
             return None;
         }
 
-        let command = vec![
-            String::from("cp"),
-            source.to_string(),
-            self.dest.to_string(),
-        ];
+        let source = if self.is_dir {
+            let mut file = PathBuf::from(source);
+            file.pop();
+            file.to_string_lossy().to_string()
+        } else {
+            source.to_string()
+        };
+
+        let command = vec![String::from("cp"), source.clone(), self.dest.to_string()];
 
         if !Path::new(&self.dest).exists() {
             return Some(Action::new(Cause::Create, command));
         }
 
-        let sha_source = match sha256(source) {
+        let sha_source = match sha256(&source) {
             Ok(hash) => hash,
             Err(err) => {
                 log::error!("cannot determine sha256 of Source file {}: {}", source, err);
