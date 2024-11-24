@@ -141,9 +141,11 @@ impl Destination {
                         self.directory
                     );
                 }
+                log::debug!("{} already exists", self.directory);
                 None
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                log::debug!("{} does not exist yet", self.directory);
                 // Directory does not exist yet. Happy path, we are gonna create it!
                 Some(Action::new(
                     Cause::Dir,
@@ -182,6 +184,7 @@ impl Destination {
         let command = vec![String::from("cp"), source.clone(), self.dest.to_string()];
 
         if !Path::new(&self.dest).exists() {
+            log::debug!("{} does not exist yet", self.dest);
             return Some(Action::new(Cause::Create, command));
         }
 

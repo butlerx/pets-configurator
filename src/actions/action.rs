@@ -16,15 +16,22 @@ impl fmt::Display for Action {
 
 impl Action {
     pub fn new(cause: Cause, command: Vec<String>) -> Self {
-        Action {
+        Self {
             cause,
             command,
             requires_sudo: false,
         }
     }
 
+    pub fn use_sudo(self) -> Self {
+        Self {
+            requires_sudo: true,
+            ..self
+        }
+    }
+
     pub fn with_sudo(cause: Cause, command: Vec<String>) -> Self {
-        Action {
+        Self {
             cause,
             command,
             requires_sudo: true,

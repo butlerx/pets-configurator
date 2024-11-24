@@ -276,14 +276,20 @@ impl PetsFile {
         // stat() the destination file to see if a chown is needed
         let stat = match fs::metadata(&destination) {
             Ok(info) => info,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // If the destination file is not there yet, prepare a chown for later on.
-                return Some(action);
-            }
-            Err(e) => {
-                log::error!("unexpected error in chown(): {}", e);
-                return None;
-            }
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => {
+                    // If the destination file is not there yet, prepare a chown for later on.
+                    return Some(action);
+                }
+                std::io::ErrorKind::PermissionDenied => {
+                    log::error!("permission denied in chown(): {}", e);
+                    return Some(action.use_sudo());
+                }
+                _ => {
+                    log::error!("unexpected error in chown(): {}", e);
+                    return None;
+                }
+            },
         };
 
         let stat_uid = stat.uid();
@@ -365,6 +371,7 @@ impl PetsFile {
 
 impl From<&PetsFile> for Vec<Action> {
     fn from(val: &PetsFile) -> Self {
+        log::debug!("planning actions for {}", val.source);
         let actions = vec![
             val.dest.needs_dir(),
             val.dest.needs_copy(&val.source),
