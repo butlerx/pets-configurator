@@ -53,6 +53,7 @@ impl Package {
             PackageManager::Pacman => ("pacman", vec!["-Si", &self.name]),
             PackageManager::Yay => ("yay", vec!["-Si", &self.name]),
             PackageManager::Cargo => ("cargo", vec!["search", "--limit=1", &self.name]),
+            PackageManager::Homebrew => ("brew", vec!["info", "-q", &self.name]),
         };
 
         let stdout = match Command::new(cmd_config.0).args(cmd_config.1).output() {
@@ -173,6 +174,17 @@ impl Package {
                         let std_our = str::from_utf8(&output.stdout).unwrap_or_default();
                         let installed = parse_cargo_installed(std_our);
                         Ok(installed.contains(&self.name))
+                    }
+                    Err(_) => Err(ActionError::NoPackageManager),
+                }
+            }
+            PackageManager::Homebrew => {
+                match Command::new("brew")
+                    .args(["list", "-1", &self.name])
+                    .output()
+                {
+                    Ok(output) => {
+                        Ok(self.name == str::from_utf8(&output.stdout).unwrap_or_default().trim())
                     }
                     Err(_) => Err(ActionError::NoPackageManager),
                 }

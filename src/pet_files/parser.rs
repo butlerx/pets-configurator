@@ -16,6 +16,8 @@ pub enum ParseError {
     FileError(#[from] io::Error),
     #[error("File not a pets file")]
     NotPetsFile,
+    #[error("No package manager found on the system")]
+    NoSupportedPackageManager,
     #[error("Neither 'destfile' nor 'symlink' directives found in '{0}'")]
     MissingDestFile(String),
     #[error("Invalid file mode: {0}")]

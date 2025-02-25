@@ -51,7 +51,7 @@ impl TryFrom<&PathBuf> for PetsFile {
             None => mode::Mode::default(),
         };
 
-        let family = package_manager::which();
+        let family = package_manager::which()?;
         let pkgs = match modelines.get("package") {
             Some(pkgs) => pkgs
                 .iter()

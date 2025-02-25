@@ -1,3 +1,4 @@
+use crate::pet_files::ParseError;
 use std::{fmt, process::Command, str};
 
 /// `PackageManager` available on the system.
@@ -10,6 +11,7 @@ pub enum PackageManager {
     Yay,
     Pacman,
     Cargo,
+    Homebrew,
 }
 
 impl fmt::Display for PackageManager {
@@ -21,6 +23,7 @@ impl fmt::Display for PackageManager {
             PackageManager::Yay => "yay",
             PackageManager::Pacman => "pacman",
             PackageManager::Cargo => "cargo",
+            PackageManager::Homebrew => "homebrew",
         };
         write!(f, "{pkg_manager}")
     }
@@ -37,6 +40,7 @@ impl str::FromStr for PackageManager {
             "yay" => Ok(PackageManager::Yay),
             "pacman" => Ok(PackageManager::Pacman),
             "cargo" => Ok(PackageManager::Cargo),
+            "homebrew" => Ok(PackageManager::Homebrew),
             _ => Err("Invalid package manager".to_string()),
         }
     }
@@ -64,6 +68,7 @@ impl PackageManager {
                 "--noconfirm".to_string(),
             ],
             PackageManager::Cargo => vec!["cargo".to_string(), "install".to_string()],
+            PackageManager::Homebrew => vec!["brew".to_string(), "install".to_string()],
         }
     }
 
@@ -76,13 +81,14 @@ impl PackageManager {
 }
 
 // Which package manager is available on the system
-pub fn which() -> PackageManager {
+pub fn which() -> Result<PackageManager, ParseError> {
     let commands = [
         ("apt", vec!["--help"]),
         ("yum", vec!["--help"]),
         ("apk", vec!["--version"]),
         ("yay", vec!["--version"]),
         ("pacman", vec!["--version"]),
+        ("homebrew", vec!["--version"]),
     ];
 
     for (cmd, args) in &commands {
@@ -90,15 +96,16 @@ pub fn which() -> PackageManager {
 
         if output.is_ok() {
             match *cmd {
-                "apt" => return PackageManager::Apt,
-                "yum" => return PackageManager::Yum,
-                "apk" => return PackageManager::Apk,
-                "yay" => return PackageManager::Yay,
-                "pacman" => return PackageManager::Pacman,
+                "apt" => return Ok(PackageManager::Apt),
+                "yum" => return Ok(PackageManager::Yum),
+                "apk" => return Ok(PackageManager::Apk),
+                "yay" => return Ok(PackageManager::Yay),
+                "pacman" => return Ok(PackageManager::Pacman),
+                "homebrew" => return Ok(PackageManager::Homebrew),
                 _ => continue,
             }
         }
     }
 
-    panic!("No package manager found on the system");
+    return Err(ParseError::NoSupportedPackageManager);
 }
