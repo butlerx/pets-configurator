@@ -102,7 +102,22 @@ impl Package {
                     self.package_manager.clone(),
                 )),
             },
-            _ => Err(ActionError::PackageNotFound(
+            PackageManager::Homebrew if !stdout.is_empty() => match stdout.split_once(":") {
+                Some((name, _)) if name.ends_with(&self.name) => {
+                    log::debug!("{} is a valid package name", self.name);
+                    Ok(())
+                }
+                _ => Err(ActionError::PackageNotFound(
+                    self.name.clone(),
+                    self.package_manager.clone(),
+                )),
+            },
+            PackageManager::Apt
+            | PackageManager::Apk
+            | PackageManager::Pacman
+            | PackageManager::Yay
+            | PackageManager::Cargo
+            | PackageManager::Homebrew => Err(ActionError::PackageNotFound(
                 self.name.clone(),
                 self.package_manager.clone(),
             )),
