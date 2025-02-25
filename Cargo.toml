@@ -1,6 +1,6 @@
 [package]
 name = "pets-configurator"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 license = "MIT"
 description = "A configuration management system for Pets, not Cattle"

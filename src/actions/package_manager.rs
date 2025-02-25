@@ -2,7 +2,7 @@ use crate::pet_files::ParseError;
 use std::{fmt, process::Command, str};
 
 /// `PackageManager` available on the system.
-/// Apt on Debian-based distros, Yum on `RedHat` and derivatives.
+/// Supports various package managers across Linux distributions and macOS (Homebrew).
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub enum PackageManager {
     Apt,
@@ -40,7 +40,7 @@ impl str::FromStr for PackageManager {
             "yay" => Ok(PackageManager::Yay),
             "pacman" => Ok(PackageManager::Pacman),
             "cargo" => Ok(PackageManager::Cargo),
-            "homebrew" => Ok(PackageManager::Homebrew),
+            "homebrew" | "brew" => Ok(PackageManager::Homebrew),
             _ => Err("Invalid package manager".to_string()),
         }
     }
@@ -80,7 +80,7 @@ impl PackageManager {
     }
 }
 
-// Which package manager is available on the system
+#[cfg(target_os = "linux")]
 pub fn which() -> Result<PackageManager, ParseError> {
     let commands = [
         ("apt", vec!["--help"]),
@@ -89,6 +89,7 @@ pub fn which() -> Result<PackageManager, ParseError> {
         ("yay", vec!["--version"]),
         ("pacman", vec!["--version"]),
         ("brew", vec!["--version"]),
+        ("cargo", vec!["--version"]),
     ];
 
     for (cmd, args) in &commands {
@@ -101,11 +102,40 @@ pub fn which() -> Result<PackageManager, ParseError> {
                 "apk" => return Ok(PackageManager::Apk),
                 "yay" => return Ok(PackageManager::Yay),
                 "pacman" => return Ok(PackageManager::Pacman),
-                "homebrew" => return Ok(PackageManager::Homebrew),
+                "cargo" => return Ok(PackageManager::Cargo),
+                "brew" => return Ok(PackageManager::Homebrew),
                 _ => continue,
             }
         }
     }
 
-    return Err(ParseError::NoSupportedPackageManager);
+    Err(ParseError::NoSupportedPackageManager)
+}
+
+#[cfg(target_os = "macos")]
+pub fn which() -> Result<PackageManager, ParseError> {
+    let commands = [("brew", vec!["--version"]), ("cargo", vec!["--version"])];
+
+    for (cmd, args) in &commands {
+        let output = Command::new(*cmd).args(args).output();
+
+        if output.is_ok() {
+            match *cmd {
+                "brew" => return Ok(PackageManager::Homebrew),
+                "cargo" => return Ok(PackageManager::Cargo),
+                _ => continue,
+            }
+        }
+    }
+
+    Err(ParseError::NoSupportedPackageManager)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+pub fn which() -> Result<PackageManager, ParseError> {
+    // For unsupported platforms, try to find cargo at least
+    if Command::new("cargo").args(["--version"]).output().is_ok() {
+        return Ok(PackageManager::Cargo);
+    }
+    Err(ParseError::NoSupportedPackageManager)
 }
