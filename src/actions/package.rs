@@ -208,42 +208,42 @@ mod tests {
 
     #[test]
     fn test_pkg_manager_specified() {
-        let family = package_manager::which();
+        let family = package_manager::which().unwrap();
         let pkg = Package::new("cargo:exa".to_string(), &family);
         assert_eq!(pkg.package_manager, PackageManager::Cargo);
     }
 
     #[test]
     fn test_pkg_is_valid() {
-        let family = package_manager::which();
+        let family = package_manager::which().unwrap();
         let pkg = Package::new("coreutils".to_string(), &family);
         assert!(pkg.is_valid().is_ok());
     }
 
     #[test]
     fn test_pkg_is_not_valid() {
-        let family = package_manager::which();
+        let family = package_manager::which().unwrap();
         let pkg = Package::new("obviously-this-cannot-be-valid".to_string(), &family);
         assert!(pkg.is_valid().is_err());
     }
 
     #[test]
     fn test_is_installed() {
-        let family = package_manager::which();
+        let family = package_manager::which().unwrap();
         let pkg = Package::new("binutils".to_string(), &family);
         assert!(pkg.is_installed().unwrap());
     }
 
     #[test]
     fn test_is_not_installed() {
-        let family = package_manager::which();
+        let family = package_manager::which().unwrap();
         let pkg = Package::new("abiword".to_string(), &family);
         assert!(!pkg.is_installed().unwrap());
     }
 
     #[test]
     fn test_is_installed_with_non_existent_package() {
-        let family = package_manager::which();
+        let family = package_manager::which().unwrap();
         let pkg = Package::new("non-existent-package".to_string(), &family);
         assert!(!pkg.is_installed().unwrap());
     }
