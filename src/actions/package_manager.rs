@@ -88,7 +88,7 @@ pub fn which() -> Result<PackageManager, ParseError> {
         ("apk", vec!["--version"]),
         ("yay", vec!["--version"]),
         ("pacman", vec!["--version"]),
-        ("homebrew", vec!["--version"]),
+        ("brew", vec!["--version"]),
     ];
 
     for (cmd, args) in &commands {
