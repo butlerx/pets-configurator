@@ -1,4 +1,7 @@
-use super::{ActionError, package_manager::PackageManager};
+use super::{
+    ActionError,
+    package_manager::{self, PackageManager},
+};
 use std::{fmt, process::Command, str};
 
 // A Package represents a distribution package.
@@ -51,6 +54,10 @@ impl Package {
             PackageManager::Yay => ("yay", vec!["-Si", &self.name]),
             PackageManager::Cargo => ("cargo", vec!["search", "--limit=1", &self.name]),
             PackageManager::Homebrew => ("brew", vec!["info", "-q", &self.name]),
+            PackageManager::Pip => {
+                let cmd = package_manager::pip_binary();
+                (cmd, vec!["show", &self.name])
+            }
         };
 
         let stdout = match Command::new(cmd_config.0).args(cmd_config.1).output() {
@@ -97,12 +104,17 @@ impl Package {
                 }
                 _ => Err(self.not_found()),
             },
+            PackageManager::Pip if !stdout.is_empty() => {
+                log::debug!("{} is a valid package name", self.name);
+                Ok(())
+            }
             PackageManager::Apt
             | PackageManager::Apk
             | PackageManager::Pacman
             | PackageManager::Yay
             | PackageManager::Cargo
-            | PackageManager::Homebrew => Err(self.not_found()),
+            | PackageManager::Homebrew
+            | PackageManager::Pip => Err(self.not_found()),
         }
     }
 
@@ -180,6 +192,13 @@ impl Package {
                     Err(_) => Err(ActionError::NoPackageManager),
                 }
             }
+            PackageManager::Pip => match Command::new(package_manager::pip_binary())
+                .args(["show", &self.name])
+                .output()
+            {
+                Ok(output) => Ok(output.status.success()),
+                Err(_) => Err(ActionError::NoPackageManager),
+            },
         }
     }
 }

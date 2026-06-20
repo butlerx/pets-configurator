@@ -1,0 +1,8 @@
+# pets: symlink=~/.config/flake8
+# pets: package=pip:flake8
+# pets: package=pip:flake8-bugbear
+
+[flake8]
+max-line-length = 120
+extend-select = B
+extend-ignore = E203, E501

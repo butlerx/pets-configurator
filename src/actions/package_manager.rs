@@ -12,6 +12,7 @@ pub enum PackageManager {
     Pacman,
     Cargo,
     Homebrew,
+    Pip,
 }
 
 impl fmt::Display for PackageManager {
@@ -24,6 +25,7 @@ impl fmt::Display for PackageManager {
             PackageManager::Pacman => "pacman",
             PackageManager::Cargo => "cargo",
             PackageManager::Homebrew => "homebrew",
+            PackageManager::Pip => "pip",
         };
         write!(f, "{pkg_manager}")
     }
@@ -41,6 +43,7 @@ impl str::FromStr for PackageManager {
             "pacman" => Ok(PackageManager::Pacman),
             "cargo" => Ok(PackageManager::Cargo),
             "homebrew" | "brew" => Ok(PackageManager::Homebrew),
+            "pip" | "pip3" => Ok(PackageManager::Pip),
             _ => Err("Invalid package manager".to_string()),
         }
     }
@@ -69,6 +72,7 @@ impl PackageManager {
             ],
             PackageManager::Cargo => vec!["cargo".to_string(), "install".to_string()],
             PackageManager::Homebrew => vec!["brew".to_string(), "install".to_string()],
+            PackageManager::Pip => vec![pip_binary().to_string(), "install".to_string()],
         }
     }
 
@@ -140,6 +144,18 @@ pub fn which() -> Result<PackageManager, ParseError> {
     Err(ParseError::NoSupportedPackageManager)
 }
 
+pub fn pip_binary() -> &'static str {
+    use std::sync::OnceLock;
+    static PIP: OnceLock<&str> = OnceLock::new();
+    PIP.get_or_init(|| {
+        if Command::new("pip3").args(["--version"]).output().is_ok() {
+            "pip3"
+        } else {
+            "pip"
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -155,6 +171,7 @@ mod tests {
             (PackageManager::Pacman, "pacman"),
             (PackageManager::Cargo, "cargo"),
             (PackageManager::Homebrew, "homebrew"),
+            (PackageManager::Pip, "pip"),
         ];
 
         for (manager, expected) in cases {
@@ -196,6 +213,14 @@ mod tests {
             PackageManager::from_str("brew").unwrap(),
             PackageManager::Homebrew
         );
+        assert_eq!(
+            PackageManager::from_str("pip").unwrap(),
+            PackageManager::Pip
+        );
+        assert_eq!(
+            PackageManager::from_str("pip3").unwrap(),
+            PackageManager::Pip
+        );
         assert!(PackageManager::from_str("invalid").is_err());
     }
 
@@ -226,6 +251,9 @@ mod tests {
             PackageManager::Homebrew.install_command(),
             vec!["brew", "install"]
         );
+        let pip_cmd = PackageManager::Pip.install_command();
+        assert!(pip_cmd[0] == "pip3" || pip_cmd[0] == "pip");
+        assert_eq!(pip_cmd[1], "install");
     }
 
     #[test]
@@ -237,5 +265,6 @@ mod tests {
         assert!(!PackageManager::Yay.requires_sudo());
         assert!(!PackageManager::Cargo.requires_sudo());
         assert!(!PackageManager::Homebrew.requires_sudo());
+        assert!(!PackageManager::Pip.requires_sudo());
     }
 }
