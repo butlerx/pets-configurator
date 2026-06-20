@@ -1,7 +1,7 @@
 # PETS Configurator
 
 [![Crates.io](https://img.shields.io/crates/v/pets-configurator)](https://crates.io/crates/pets-configurator)
-[![CI](https://github.com/butlerx/pets-configurator/actions/workflows/rust.yml/badge.svg)](https://github.com/butlerx/pets-configurator/actions/workflows/rust.yml)
+[![CI](https://github.com/butlerx/pets-configurator/actions/workflows/ci.yml/badge.svg)](https://github.com/butlerx/pets-configurator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/crates/l/pets-configurator)](LICENSE)
 
 A configuration management system for computers that are Pets, not Cattle.
