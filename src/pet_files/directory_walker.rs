@@ -54,7 +54,7 @@ fn process_pets_file(
         Ok(pf) => Ok(Some(pf)),
         Err(error) => match error {
             ParseError::NotPetsFile => Ok(None),
-            ParseError::MissingDestFile(_) => {
+            ParseError::MissingDestFile(_) | ParseError::UnknownDirective(_) => {
                 log::error!("{error}");
                 Ok(None)
             }
