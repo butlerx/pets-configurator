@@ -12,8 +12,8 @@ pub struct PetsFile {
     source: String,
     dest: destination::Destination,
     pkgs: Vec<Package>,
-    user: Option<users::User>,
-    group: Option<users::Group>,
+    user: Option<uzers::User>,
+    group: Option<uzers::Group>,
     mode: mode::Mode,
     pre: Option<Vec<String>>,
     post: Option<Vec<String>>,
@@ -66,28 +66,28 @@ impl PetsFile {
 
         let user = match modelines.get("owner") {
             Some(user) => {
-                if let Some(user) = users::get_user_by_name(&user[0]) {
+                if let Some(user) = uzers::get_user_by_name(&user[0]) {
                     Some(user)
                 } else {
                     // TODO: one day we may add support for creating users
                     log::warn!("unknown 'owner' {}, skipping directive", user[0]);
-                    users::get_user_by_uid(users::get_current_uid())
+                    uzers::get_user_by_uid(uzers::get_current_uid())
                 }
             }
-            None => users::get_user_by_uid(users::get_current_uid()),
+            None => uzers::get_user_by_uid(uzers::get_current_uid()),
         };
 
         let group = match modelines.get("group") {
             Some(group) => {
-                if let Some(group) = users::get_group_by_name(&group[0]) {
+                if let Some(group) = uzers::get_group_by_name(&group[0]) {
                     Some(group)
                 } else {
                     // TODO: one day we may add support for creating groups
                     log::warn!("unknown 'group' {}, skipping directive", &group[0]);
-                    users::get_group_by_gid(users::get_current_gid())
+                    uzers::get_group_by_gid(uzers::get_current_gid())
                 }
             }
-            None => users::get_group_by_gid(users::get_current_gid()),
+            None => uzers::get_group_by_gid(uzers::get_current_gid()),
         };
 
         let pre = parse_command_directive(modelines.get("pre"));
@@ -497,8 +497,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let source = dir.path().join("config.conf");
         let dest = dir.path().join("dest.conf");
-        let current_user = users::get_user_by_uid(users::get_current_uid()).unwrap();
-        let current_group = users::get_group_by_gid(users::get_current_gid()).unwrap();
+        let current_user = uzers::get_user_by_uid(uzers::get_current_uid()).unwrap();
+        let current_group = uzers::get_group_by_gid(uzers::get_current_gid()).unwrap();
         let user_name = current_user.name().to_string_lossy().into_owned();
         let group_name = current_group.name().to_string_lossy().into_owned();
 
@@ -514,11 +514,11 @@ mod tests {
 
         let parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
         assert_eq!(
-            parsed.user.as_ref().map(users::User::uid),
+            parsed.user.as_ref().map(uzers::User::uid),
             Some(current_user.uid())
         );
         assert_eq!(
-            parsed.group.as_ref().map(users::Group::gid),
+            parsed.group.as_ref().map(uzers::Group::gid),
             Some(current_group.gid())
         );
     }
@@ -528,7 +528,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let source = dir.path().join("config.conf");
         let dest = dir.path().join("dest.conf");
-        let current_uid = users::get_current_uid();
+        let current_uid = uzers::get_current_uid();
         write_pets_file(
             &source,
             &[
@@ -540,7 +540,7 @@ mod tests {
 
         let parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
         assert_eq!(
-            parsed.user.as_ref().map(users::User::uid),
+            parsed.user.as_ref().map(uzers::User::uid),
             Some(current_uid)
         );
     }
