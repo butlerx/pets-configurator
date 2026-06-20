@@ -34,14 +34,18 @@ pub fn check_global_constraints(files: &[PetsFile]) -> Result<(), DuplicateDefin
 
     for pf in files {
         let dest = pf.destination();
-        if let Some(other) = seen.get(&dest) {
-            return Err(DuplicateDefinitionError::new(
-                dest,
-                pf.source(),
-                other.source(),
-            ));
+        match seen.entry(dest) {
+            std::collections::hash_map::Entry::Occupied(entry) => {
+                return Err(DuplicateDefinitionError::new(
+                    entry.key().clone(),
+                    pf.source().to_owned(),
+                    entry.get().source().to_owned(),
+                ));
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(pf);
+            }
         }
-        seen.insert(dest.clone(), pf);
     }
 
     Ok(())

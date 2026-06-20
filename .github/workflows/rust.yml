@@ -1,43 +1,59 @@
 name: Rust
 on:
   push:
-    branches: ['main']
+    branches:
+      - 'main'
   pull_request:
-    branches: ['main']
+    branches:
+      - 'main'
 env:
   CARGO_TERM_COLOR: always
+permissions:
+  contents: write
 jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: clippy, rustfmt
+      - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
   build:
     runs-on: ubuntu-latest
+    needs: pre-commit
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
       - name: Cache Dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           cache-on-failure: true
           cache-all-crates: true
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           components: clippy, rustfmt
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
       - name: Build
         run: cargo build --verbose
       - name: Run tests
         run: cargo test --verbose
-      - uses: katyo/publish-crates@v2
+      - uses: katyo/publish-crates@02cc2f1ad653fb25c7d1ff9eb590a8a50d06186b # v2
         id: publish-crates
         with:
           dry-run: ${{ github.event_name != 'push' }}
           registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           ignore-unpublished-changes: true
       - name: Tag Version
-        if:
-          github.event_name == 'push' && steps.publish-crates.outputs.published
-          != ''
-        run: |
-          version="${{ fromJSON(steps.publish-crates.outputs.published).pets-configurator.version }}"
-          git tag "${version}"
-          git push origin "${version}"
+        if: github.event_name == 'push' && steps.publish-crates.outputs.published != ''
+        env:
+          VERSION: ${{ fromJSON(steps.publish-crates.outputs.published).pets-configurator.version }}
+        run: |-
+          git tag "${VERSION}"
+          git push origin "${VERSION}"

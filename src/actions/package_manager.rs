@@ -3,7 +3,7 @@ use std::{fmt, process::Command, str};
 
 /// `PackageManager` available on the system.
 /// Supports various package managers across Linux distributions and macOS (Homebrew).
-#[derive(Clone, Debug, PartialEq, Hash, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Hash, Eq)]
 pub enum PackageManager {
     Apt,
     Yum,
@@ -48,7 +48,7 @@ impl str::FromStr for PackageManager {
 
 impl PackageManager {
     // returns the command needed to install packages on this system.
-    pub fn install_command(&self) -> Vec<String> {
+    pub fn install_command(self) -> Vec<String> {
         match self {
             PackageManager::Apt => vec![
                 "apt-get".to_string(),
@@ -72,7 +72,7 @@ impl PackageManager {
         }
     }
 
-    pub fn requires_sudo(&self) -> bool {
+    pub fn requires_sudo(self) -> bool {
         matches!(
             self,
             PackageManager::Apt | PackageManager::Yum | PackageManager::Pacman

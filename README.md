@@ -271,3 +271,40 @@ webserver.example.com
 
 setting=value
 ```
+
+## Development
+
+### Prerequisites
+
+- [Rust](https://rustup.rs/) 1.85+
+- [pre-commit](https://pre-commit.com/)
+
+### Setup
+
+```bash
+git clone https://github.com/butlerx/pets-configurator.git
+cd pets-configurator
+pre-commit install --hook-type pre-commit --hook-type commit-msg
+cargo build
+```
+
+### Running checks
+
+Pre-commit handles formatting, linting, and commit message validation
+automatically. To run all hooks manually:
+
+```bash
+pre-commit run --all-files
+```
+
+Or run individual tools:
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
+Commits must follow
+[Conventional Commits](https://www.conventionalcommits.org/) format (enforced by
+pre-commit).

@@ -17,5 +17,5 @@ pub fn load<P: AsRef<std::path::Path>>(directory: P) -> Result<Vec<PetsFile>, Pa
     );
 
     let pkg_manager = package_manager::which()?;
-    DirectoryWalker::new(directory).collect(&pkg_manager)
+    DirectoryWalker::new(directory).collect(pkg_manager)
 }

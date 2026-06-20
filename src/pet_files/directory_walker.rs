@@ -26,7 +26,7 @@ impl<P: AsRef<Path>> DirectoryWalker<P> {
             .map(Ok)
     }
 
-    pub fn collect(self, package_manager: &PackageManager) -> Result<Vec<PetsFile>, ParseError> {
+    pub fn collect(self, package_manager: PackageManager) -> Result<Vec<PetsFile>, ParseError> {
         log::debug!(
             "using configuration directory '{}'",
             self.directory.as_ref().display()
@@ -48,7 +48,7 @@ fn is_git_dir(entry: &DirEntry) -> bool {
 
 fn process_pets_file(
     path: &PathBuf,
-    package_manager: &PackageManager,
+    package_manager: PackageManager,
 ) -> Result<Option<PetsFile>, ParseError> {
     match PetsFile::from_path(path, package_manager) {
         Ok(pf) => Ok(Some(pf)),
@@ -114,7 +114,7 @@ mod tests {
         let walker = DirectoryWalker::new(temp_dir.path());
         let pkg_manager = test_package_manager();
 
-        let result = walker.collect(&pkg_manager).unwrap();
+        let result = walker.collect(pkg_manager).unwrap();
 
         // Should find exactly 2 valid .pets files
         assert_eq!(result.len(), 2);
@@ -126,7 +126,7 @@ mod tests {
         let walker = DirectoryWalker::new(temp_dir.path());
         let pkg_manager = test_package_manager();
 
-        let result = walker.collect(&pkg_manager).unwrap();
+        let result = walker.collect(pkg_manager).unwrap();
         assert!(result.is_empty());
     }
 
@@ -141,7 +141,7 @@ mod tests {
 
         let walker = DirectoryWalker::new(temp_dir.path());
         let pkg_manager = test_package_manager();
-        let result = walker.collect(&pkg_manager).unwrap();
+        let result = walker.collect(pkg_manager).unwrap();
 
         assert!(result.is_empty());
     }

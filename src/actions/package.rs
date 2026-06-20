@@ -9,15 +9,15 @@ pub struct Package {
 }
 
 impl Package {
-    pub fn new(name: String, default_package_manager: &PackageManager) -> Self {
+    pub fn new(name: &str, default_package_manager: PackageManager) -> Self {
         let (name, package_manager) = match name.split_once(':') {
             Some((manager, name)) => {
                 let package_manager = manager
                     .parse::<PackageManager>()
-                    .unwrap_or_else(|_| default_package_manager.clone());
-                (name.to_string(), package_manager)
+                    .unwrap_or(default_package_manager);
+                (name.to_owned(), package_manager)
             }
-            None => (name, default_package_manager.clone()),
+            None => (name.to_owned(), default_package_manager),
         };
         Self {
             name,
@@ -33,7 +33,10 @@ impl fmt::Display for Package {
 }
 
 impl Package {
-    // returns true if the given Package is available in the distro.
+    fn not_found(&self) -> ActionError {
+        ActionError::PackageNotFound(self.name.clone(), self.package_manager)
+    }
+
     pub fn is_valid(&self) -> Result<(), ActionError> {
         log::debug!(
             "Getting package info for {} from {}",
@@ -55,10 +58,7 @@ impl Package {
                 .unwrap_or_default()
                 .to_string(),
             Ok(_) => {
-                return Err(ActionError::PackageNotFound(
-                    self.name.clone(),
-                    self.package_manager.clone(),
-                ));
+                return Err(self.not_found());
             }
             Err(_) => return Err(ActionError::NoPackageManager),
         };
@@ -77,10 +77,7 @@ impl Package {
                         }
                     }
                 }
-                Err(ActionError::PackageNotFound(
-                    self.name.clone(),
-                    self.package_manager.clone(),
-                ))
+                Err(self.not_found())
             }
             PackageManager::Pacman | PackageManager::Yay if !stdout.starts_with("error:") => {
                 log::debug!("{} is a valid package name", self.name);
@@ -91,30 +88,21 @@ impl Package {
                     log::debug!("{} is a valid package name", self.name);
                     Ok(())
                 }
-                _ => Err(ActionError::PackageNotFound(
-                    self.name.clone(),
-                    self.package_manager.clone(),
-                )),
+                _ => Err(self.not_found()),
             },
             PackageManager::Homebrew if !stdout.is_empty() => match stdout.split_once(':') {
                 Some((name, _)) if name.ends_with(&self.name) => {
                     log::debug!("{} is a valid package name", self.name);
                     Ok(())
                 }
-                _ => Err(ActionError::PackageNotFound(
-                    self.name.clone(),
-                    self.package_manager.clone(),
-                )),
+                _ => Err(self.not_found()),
             },
             PackageManager::Apt
             | PackageManager::Apk
             | PackageManager::Pacman
             | PackageManager::Yay
             | PackageManager::Cargo
-            | PackageManager::Homebrew => Err(ActionError::PackageNotFound(
-                self.name.clone(),
-                self.package_manager.clone(),
-            )),
+            | PackageManager::Homebrew => Err(self.not_found()),
         }
     }
 
@@ -130,10 +118,7 @@ impl Package {
                         .unwrap_or_default()
                         .to_string(),
                     Ok(_) => {
-                        return Err(ActionError::PackageNotFound(
-                            self.name.clone(),
-                            self.package_manager.clone(),
-                        ));
+                        return Err(self.not_found());
                     }
                     Err(_) => return Err(ActionError::NoPackageManager),
                 };
@@ -215,7 +200,7 @@ mod tests {
     #[test]
     fn test_pkg_manager_specified() {
         let family = package_manager::which().unwrap();
-        let pkg = Package::new("cargo:exa".to_string(), &family);
+        let pkg = Package::new("cargo:exa", family);
         assert_eq!(pkg.package_manager, PackageManager::Cargo);
     }
 
@@ -223,7 +208,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     fn test_pkg_is_valid() {
         let family = package_manager::which().unwrap();
-        let pkg = Package::new("coreutils".to_string(), &family);
+        let pkg = Package::new("coreutils", family);
         assert!(pkg.is_valid().is_ok());
     }
 
@@ -231,14 +216,14 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn test_pkg_is_valid() {
         let family = package_manager::which().unwrap();
-        let pkg = Package::new("wget".to_string(), &family);
+        let pkg = Package::new("wget", family);
         assert!(pkg.is_valid().is_ok());
     }
 
     #[test]
     fn test_pkg_is_not_valid() {
         let family = package_manager::which().unwrap();
-        let pkg = Package::new("obviously-this-cannot-be-valid".to_string(), &family);
+        let pkg = Package::new("obviously-this-cannot-be-valid", family);
         assert!(pkg.is_valid().is_err());
     }
 
@@ -246,7 +231,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     fn test_is_installed() {
         let family = package_manager::which().unwrap();
-        let pkg = Package::new("binutils".to_string(), &family);
+        let pkg = Package::new("binutils", family);
         assert!(pkg.is_installed().unwrap());
     }
 
@@ -254,7 +239,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn test_is_installed() {
         let family = package_manager::which().unwrap();
-        let pkg = Package::new("wget".to_string(), &family);
+        let pkg = Package::new("wget", family);
         assert!(pkg.is_installed().unwrap());
     }
 
@@ -262,7 +247,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     fn test_is_not_installed() {
         let family = package_manager::which().unwrap();
-        let pkg = Package::new("abiword".to_string(), &family);
+        let pkg = Package::new("abiword", family);
         assert!(!pkg.is_installed().unwrap());
     }
 
@@ -270,14 +255,14 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn test_is_not_installed() {
         let family = package_manager::which().unwrap();
-        let pkg = Package::new("lynx".to_string(), &family);
+        let pkg = Package::new("lynx", family);
         assert!(!pkg.is_installed().unwrap());
     }
 
     #[test]
     fn test_is_installed_with_non_existent_package() {
         let family = package_manager::which().unwrap();
-        let pkg = Package::new("non-existent-package".to_string(), &family);
+        let pkg = Package::new("non-existent-package", family);
         assert!(!pkg.is_installed().unwrap());
     }
 

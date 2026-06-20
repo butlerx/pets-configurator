@@ -23,7 +23,7 @@ pub struct PetsFile {
 impl PetsFile {
     pub fn from_path(
         path: &PathBuf,
-        package_manager: &PackageManager,
+        package_manager: PackageManager,
     ) -> Result<Self, parser::ParseError> {
         let modelines = parser::read_modelines(path)?;
         if modelines.is_empty() {
@@ -59,7 +59,7 @@ impl PetsFile {
         let pkgs = match modelines.get("package") {
             Some(pkgs) => pkgs
                 .iter()
-                .map(|pkg| Package::new(pkg.clone(), package_manager))
+                .map(|pkg| Package::new(pkg, package_manager))
                 .collect(),
             None => Vec::new(),
         };
@@ -112,8 +112,8 @@ impl PetsFile {
         self.dest.to_string()
     }
 
-    pub fn source(&self) -> String {
-        self.source.clone()
+    pub fn source(&self) -> &str {
+        &self.source
     }
 
     pub fn packages(&self) -> &[Package] {
@@ -251,17 +251,15 @@ impl PetsFile {
         };
 
         if arg.is_empty() {
-            // Return immediately if the file had no 'owner' / 'group' directives
             return None;
         }
 
-        // The action to (possibly) perform is a chown of the file.
         let action = Action::chown(
             Cause::Owner,
             PathBuf::from(self.dest.to_string()),
             want_user_id,
             want_group_id,
-            arg.clone(),
+            arg,
         );
 
         let destination = self.dest.to_string();

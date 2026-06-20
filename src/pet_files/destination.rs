@@ -58,8 +58,8 @@ impl Destination {
         self.link
     }
 
-    pub fn directory(&self) -> String {
-        self.directory.clone()
+    pub fn directory(&self) -> &str {
+        &self.directory
     }
 
     /// figures out if a symbolic link needs to be created, and returns the corresponding `Action`
