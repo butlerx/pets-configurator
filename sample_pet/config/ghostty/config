@@ -1,0 +1,9 @@
+# pets: symlink=~/.config/ghostty/config
+# pets: package=yay:ghostty
+# pets: when=os:linux
+
+theme = Monokai Soda
+background-opacity = 0.8
+font-size = 11.5
+clipboard-paste-protection = false
+gtk-titlebar = false

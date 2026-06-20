@@ -35,25 +35,29 @@ arbitrary.
 cargo install pets-configurator
 ```
 
-Create `~/pets/sudoers` with:
+Create `~/pets/gitconfig` with:
 
-```sudoers
-# pets: destfile=/etc/sudoers.d/myuser, owner=root, group=root, mode=0440
-# pets: package=sudo
-# pets: pre=/usr/sbin/visudo -cf
-myuser ALL=(ALL:ALL) NOPASSWD:ALL
+```gitconfig
+# pets: package=git
+# pets: symlink=~/.gitconfig
+
+[user]
+    name = Your Name
+    email = you@example.com
+[push]
+    default = simple
 ```
 
 Preview what would happen:
 
 ```bash
-sudo pets --dry-run
+pets --dry-run
 ```
 
 Apply:
 
 ```bash
-sudo pets
+pets
 ```
 
 ## Usage
@@ -194,82 +198,141 @@ all existing backup files.
 
 ## Examples
 
-### Vim configuration (symlink)
+The most common use case is managing dotfiles across machines. Store your config
+files in a git repo, add `# pets:` directives, and run `pets` to symlink or
+copy them into place.
 
-```vim
-; pets: symlink=/root/.vimrc
+See [sample_pet](./sample_pet) for a complete example.
 
-syntax on
-set expandtab
-set shiftwidth=4
+### Shell configuration (symlink with packages)
+
+```zsh
+# pets: package=zsh
+# pets: package=cargo:exa
+# pets: package=bat
+# pets: symlink=~/.zshrc
+
+fpath=(~/.zsh-completions $fpath)
+
+alias ll='exa -la --git'
+alias cat='bat --paging=never'
 ```
 
-### SSH server
+### Git configuration (mixed package managers)
+
+```gitconfig
+# pets: package=git, package=apt:gh, package=yay:github-cli
+# pets: symlink=~/.gitconfig
+
+[user]
+    name = Your Name
+    email = you@example.com
+[push]
+    default = simple
+[pull]
+    rebase = true
+```
+
+### Terminal emulator (platform-specific build deps)
+
+```toml
+# pets: package=cargo:alacritty
+# pets: package=apt:cmake, package=apt:pkg-config, package=apt:libfreetype6-dev
+# pets: symlink=~/.config/alacritty/alacritty.toml
+
+[font]
+size = 9.0
+
+[window]
+opacity = 0.95
+```
+
+### Directory symlink (neovim config)
+
+Create a `.petsfile` inside the directory:
+
+```
+# pets: symlink=~/.config/nvim
+# pets: package=ripgrep, package=perl
+```
+
+The entire directory is symlinked to `~/.config/nvim`.
+
+### SSH server (destfile with validation)
 
 ```sshd
 # pets: destfile=/etc/ssh/sshd_config, owner=root, group=root, mode=0644
 # pets: package=ssh
 # pets: pre=/usr/sbin/sshd -t -f
 # pets: post=/bin/systemctl reload ssh.service
+# pets: when=os:linux
 
 PasswordAuthentication no
-ChallengeResponseAuthentication no
-UsePAM yes
+PubkeyAuthentication yes
+PermitRootLogin no
 ```
 
-### Firewall (ferm)
+### Linux-only window manager
 
-```
-# pets: destfile=/etc/ferm/ferm.conf, owner=root, group=root, mode=644
-# pets: package=ferm
-# pets: pre=/usr/sbin/ferm -n
-# pets: post=/bin/systemctl reload ferm.service
+```i3
+# pets: package=yay:i3-wm, package=apt:i3
+# pets: package=rofi, package=playerctl
+# pets: symlink=~/.config/i3/config
+# pets: when=os:linux
 
-domain (ip ip6) {
-    table filter {
-        chain INPUT {
-            policy DROP;
-            mod state state INVALID DROP;
-            mod state state (ESTABLISHED RELATED) ACCEPT;
-            interface lo ACCEPT;
-            proto icmp ACCEPT;
-            proto tcp dport ssh ACCEPT;
-        }
-        chain OUTPUT  { policy ACCEPT; }
-        chain FORWARD { policy DROP; }
-    }
-}
+set $mod Mod4
+bindsym $mod+Return exec alacritty
+bindsym $mod+d exec rofi -show drun
 ```
 
-### Multiple packages with mixed managers
+### Docker compose deployment
 
-```
-# pets: destfile=/etc/myapp.conf
-# pets: package=curl
-# pets: package=cargo:ripgrep
+```yaml
+# pets: destfile=/opt/myapp/docker-compose.yml, owner=root, group=docker, mode=0640
+# pets: package=docker.io
+# pets: package=docker-compose
+# pets: post=/usr/bin/docker-compose -f /opt/myapp/docker-compose.yml up -d
+# pets: when=os:linux
 
-[myapp]
-search_tool=rg
-```
-
-### Host-specific configuration
-
-```
-# pets: destfile=/etc/hostname, owner=root, group=root, mode=0644
-# pets: when=hostname:webserver
-
-webserver.example.com
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+  cache:
+    image: redis:alpine
 ```
 
-### macOS-only Homebrew setup
+### Systemd timer (scheduled backups)
 
-```bash
-# pets: destfile=/usr/local/etc/my-tool.conf
-# pets: when=os:macos
-# pets: package=brew:my-tool
-# pets: post=/usr/bin/pkill -HUP my-tool
+Service unit:
 
-setting=value
+```ini
+# pets: destfile=/etc/systemd/system/backup.service, owner=root, group=root, mode=0644
+# pets: post=/bin/systemctl daemon-reload
+# pets: when=os:linux
+
+[Unit]
+Description=System backup service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backup.sh
+```
+
+Timer unit:
+
+```ini
+# pets: destfile=/etc/systemd/system/backup.timer, owner=root, group=root, mode=0644
+# pets: post=/bin/systemctl daemon-reload
+# pets: when=os:linux
+
+[Unit]
+Description=Run backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
 ```
 
 ## Development

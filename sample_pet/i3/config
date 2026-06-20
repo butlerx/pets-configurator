@@ -1,0 +1,18 @@
+# pets: package=yay:i3-wm, package=apt:i3
+# pets: package=rofi, package=xbindkeys, package=playerctl
+# pets: symlink=~/.config/i3/config
+# pets: when=os:linux
+
+set $mod Mod4
+
+font pango:monospace 10
+floating_modifier $mod
+
+bindsym $mod+Return exec alacritty
+bindsym $mod+d exec rofi -show drun
+bindsym $mod+Shift+q kill
+
+bindsym $mod+h focus left
+bindsym $mod+j focus down
+bindsym $mod+k focus up
+bindsym $mod+l focus right

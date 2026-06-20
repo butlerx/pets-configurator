@@ -1,0 +1,25 @@
+# pets: destfile=/opt/myapp/docker-compose.yml, owner=root, group=docker, mode=0640
+# pets: package=docker.io
+# pets: package=docker-compose
+# pets: post=/usr/bin/docker-compose -f /opt/myapp/docker-compose.yml up -d
+# pets: when=os:linux
+
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./html:/usr/share/nginx/html:ro
+    depends_on:
+      - cache
+    restart: unless-stopped
+
+  cache:
+    image: redis:alpine
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  redis_data:

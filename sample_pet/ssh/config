@@ -1,0 +1,9 @@
+# pets: symlink=~/.ssh/config, owner=butlerx, group=butlerx, mode=0644
+# pets: package=apt:openssh-client, package=yay:openssh
+
+Host *
+    ForwardAgent yes
+    AddKeysToAgent yes
+    IdentityFile ~/.ssh/id_ed25519
+    VerifyHostKeyDNS ask
+    StrictHostKeyChecking ask

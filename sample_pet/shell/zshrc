@@ -1,0 +1,14 @@
+# pets: package=zsh
+# pets: package=cargo:exa
+# pets: package=bat
+# pets: symlink=~/.zshrc
+
+fpath=(~/.zsh-completions $fpath)
+
+autoload -Uz compinit && compinit
+
+alias ll='exa -la --git'
+alias cat='bat --paging=never'
+
+export EDITOR=vim
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"

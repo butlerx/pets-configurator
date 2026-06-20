@@ -1,0 +1,15 @@
+# pets: package=cargo:alacritty
+# pets: package=apt:cmake, package=apt:pkg-config, package=apt:libfreetype6-dev
+# pets: symlink=~/.config/alacritty/alacritty.toml
+
+[font]
+size = 9.0
+
+[window]
+dynamic_padding = true
+opacity = 0.95
+
+[keyboard]
+bindings = [
+    { key = "N", mods = "Control|Shift", action = "CreateNewWindow" },
+]

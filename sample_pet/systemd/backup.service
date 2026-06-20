@@ -1,0 +1,17 @@
+# pets: destfile=/etc/systemd/system/backup.service, owner=root, group=root, mode=0644
+# pets: post=/bin/systemctl daemon-reload
+# pets: when=os:linux
+
+[Unit]
+Description=System backup service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backup.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

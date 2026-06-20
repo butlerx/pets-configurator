@@ -1,7 +1,14 @@
-; pets: package=vim
-; pets: symlink=/root/.vimrc
+" pets: package=vim
+" pets: symlink=~/.vimrc
 
-syntax on
+if has('syntax')
+  if !exists('g:syntax_on')
+    syntax enable
+  endif
+endif
+
 set expandtab
 set shiftwidth=4
 set tabstop=4
+set number
+set autoindent

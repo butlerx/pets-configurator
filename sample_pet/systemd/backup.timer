@@ -1,0 +1,14 @@
+# pets: destfile=/etc/systemd/system/backup.timer, owner=root, group=root, mode=0644
+# pets: post=/bin/systemctl daemon-reload
+# pets: when=os:linux
+
+[Unit]
+Description=Run backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target

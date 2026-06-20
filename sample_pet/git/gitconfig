@@ -1,0 +1,15 @@
+# pets: package=git, package=apt:gh, package=yay:github-cli
+# pets: symlink=~/.gitconfig
+
+[user]
+    name = Your Name
+    email = you@example.com
+[push]
+    default = simple
+    autoSetupRemote = true
+[pull]
+    rebase = true
+[init]
+    defaultBranch = main
+[alias]
+    lg = log --oneline --graph --decorate
