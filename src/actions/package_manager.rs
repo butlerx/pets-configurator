@@ -104,7 +104,7 @@ pub fn which() -> Result<PackageManager, ParseError> {
                 "pacman" => return Ok(PackageManager::Pacman),
                 "cargo" => return Ok(PackageManager::Cargo),
                 "brew" => return Ok(PackageManager::Homebrew),
-                _ => continue,
+                _ => {}
             }
         }
     }
@@ -123,7 +123,7 @@ pub fn which() -> Result<PackageManager, ParseError> {
             match *cmd {
                 "brew" => return Ok(PackageManager::Homebrew),
                 "cargo" => return Ok(PackageManager::Cargo),
-                _ => continue,
+                _ => {}
             }
         }
     }

@@ -18,7 +18,7 @@ impl TryFrom<&String> for Mode {
         match u32::from_str_radix(perm, 8) {
             // The specified 'mode' string is valid.
             Ok(num) if num <= 0o777 => Ok(Self(num)),
-            _ => Err(Self::Error::InvalidFileMode(mode.to_string())),
+            _ => Err(Self::Error::InvalidFileMode(mode.clone())),
         }
     }
 }
@@ -32,6 +32,10 @@ impl PartialEq<u32> for Mode {
 impl Mode {
     pub fn is_empty(&self) -> bool {
         self.0 == u32::MIN
+    }
+
+    pub fn as_raw(&self) -> u32 {
+        self.0
     }
 }
 

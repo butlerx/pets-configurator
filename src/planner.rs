@@ -12,31 +12,19 @@ use std::{
     str::FromStr,
     string::ToString,
 };
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error("duplicate definition for '{dest}': '{src}' and '{other}'")]
 pub struct DuplicateDefinitionError {
     dest: String,
-    source: String,
+    src: String,
     other: String,
 }
 
 impl DuplicateDefinitionError {
-    pub fn new(dest: String, source: String, other: String) -> Self {
-        Self {
-            dest,
-            source,
-            other,
-        }
-    }
-}
-
-impl std::fmt::Display for DuplicateDefinitionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "duplicate definition for '{}': '{}' and '{}'",
-            self.dest, self.source, self.other
-        )
+    pub fn new(dest: String, src: String, other: String) -> Self {
+        Self { dest, src, other }
     }
 }
 
@@ -53,7 +41,7 @@ pub fn check_global_constraints(files: &[PetsFile]) -> Result<(), DuplicateDefin
                 other.source(),
             ));
         }
-        seen.insert(dest.to_string(), pf);
+        seen.insert(dest.clone(), pf);
     }
 
     Ok(())
@@ -103,14 +91,14 @@ pub fn plan_actions(files: Vec<PetsFile>) -> Vec<actions::Action> {
                 let pkg_manager = PackageManager::from_str(pkg_manager).unwrap();
                 let install_vec = pkg_manager.install_command();
 
-                let packages_to_isntall = install_vec
+                let packages_to_install = install_vec
                     .into_iter()
                     .chain(packages.iter().map(ToString::to_string))
                     .collect();
                 if pkg_manager.requires_sudo() {
-                    actions::Action::with_sudo(actions::Cause::Pkg, packages_to_isntall)
+                    actions::Action::command_with_sudo(actions::Cause::Pkg, packages_to_install)
                 } else {
-                    actions::Action::new(actions::Cause::Pkg, packages_to_isntall)
+                    actions::Action::command(actions::Cause::Pkg, packages_to_install)
                 }
             })
             .chain(trigger_actions)

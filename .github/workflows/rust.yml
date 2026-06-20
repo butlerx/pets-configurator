@@ -17,6 +17,12 @@ jobs:
           cache-on-failure: true
           cache-all-crates: true
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
       - name: Build
         run: cargo build --verbose
       - name: Run tests
@@ -29,9 +35,9 @@ jobs:
           ignore-unpublished-changes: true
       - name: Tag Version
         if:
-          github.event_name != 'push' && steps.publish-crates.outputs.published
+          github.event_name == 'push' && steps.publish-crates.outputs.published
           != ''
         run: |
-          version="${{ fromJSON(steps.publish-crates.outputs.published).pets-configurator.vesion }}"
-          git tag ${version}
-          git push origin ${version}
+          version="${{ fromJSON(steps.publish-crates.outputs.published).pets-configurator.version }}"
+          git tag "${version}"
+          git push origin "${version}"

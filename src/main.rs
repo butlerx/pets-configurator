@@ -46,7 +46,7 @@ fn main() {
 
     // Configuration parser
     let files = pet_files::load(&args.conf_dir).unwrap_or_else(|err| {
-        log::error!("{}", err);
+        log::error!("{err}");
         vec![]
     });
 
@@ -58,7 +58,7 @@ fn main() {
 
     // Config validator
     if let Err(global_errors) = planner::check_global_constraints(&files) {
-        log::error!("{}", global_errors);
+        log::error!("{global_errors}");
         // Global validation errors mean we should stop the whole update.
         process::exit(1);
     }
@@ -84,22 +84,22 @@ fn main() {
             }
             Err(err) => match err {
                 actions::ActionError::ExecError(cmd, status, err) => {
-                    log::error!("Error: {} exited with {} => {}", cmd, status, err);
+                    log::error!("Error: {cmd} exited with {status} => {err}");
                     exit_status = status;
                     break;
                 }
                 actions::ActionError::IoError(err) => {
-                    log::error!("Error performing action: {}", err);
+                    log::error!("Error performing action: {err}");
                     exit_status = 1;
                     break;
                 }
                 _ => {
-                    log::error!("Unknown error: {}", err);
+                    log::error!("Unknown error: {err}");
                     exit_status = 1;
                     break;
                 }
             },
-            _ => continue,
+            _ => {}
         }
     }
 

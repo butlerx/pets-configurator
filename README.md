@@ -13,12 +13,15 @@ They're actually a bit more than Pets. They're almost Family. For example: a
 laptop, workstation, and that personal tiny server in Sweden. They are all named
 after something dear.
 
-pets works on Linux systems. The following distro families are supported:
+pets works on Linux and macOS systems. The following package managers are
+supported:
 
 - Debian-like (apt)
 - RedHat-like (yum)
 - Alpine (apk)
 - Arch Linux (pacman, yay)
+- macOS (Homebrew)
+- Cargo (cross-platform)
 
 ## Summary
 

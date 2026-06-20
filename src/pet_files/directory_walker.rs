@@ -1,4 +1,5 @@
 use super::{ParseError, PetsFile};
+use crate::actions::package_manager::PackageManager;
 use std::{
     convert::AsRef,
     path::{Path, PathBuf},
@@ -25,7 +26,7 @@ impl<P: AsRef<Path>> DirectoryWalker<P> {
             .map(Ok)
     }
 
-    pub fn collect(self) -> Result<Vec<PetsFile>, ParseError> {
+    pub fn collect(self, package_manager: &PackageManager) -> Result<Vec<PetsFile>, ParseError> {
         log::debug!(
             "using configuration directory '{}'",
             self.directory.as_ref().display()
@@ -33,7 +34,7 @@ impl<P: AsRef<Path>> DirectoryWalker<P> {
 
         self.into_iter()
             .filter_map(Result::ok)
-            .filter_map(|path| process_pets_file(&path).transpose())
+            .filter_map(|path| process_pets_file(&path, package_manager).transpose())
             .collect()
     }
 }
@@ -45,8 +46,11 @@ fn is_git_dir(entry: &DirEntry) -> bool {
         .is_some_and(|s| s.starts_with(".git"))
 }
 
-fn process_pets_file(path: &PathBuf) -> Result<Option<PetsFile>, ParseError> {
-    match PetsFile::try_from(path) {
+fn process_pets_file(
+    path: &PathBuf,
+    package_manager: &PackageManager,
+) -> Result<Option<PetsFile>, ParseError> {
+    match PetsFile::from_path(path, package_manager) {
         Ok(pf) => Ok(Some(pf)),
         Err(error) => match error {
             ParseError::NotPetsFile => Ok(None),
@@ -67,6 +71,12 @@ mod tests {
         io::Write,
     };
     use tempfile::TempDir;
+
+    use crate::actions::package_manager;
+
+    fn test_package_manager() -> PackageManager {
+        package_manager::which().unwrap()
+    }
 
     #[test]
     fn test_directory_walker_collects_pets_files() {
@@ -102,8 +112,9 @@ mod tests {
         }
 
         let walker = DirectoryWalker::new(temp_dir.path());
+        let pkg_manager = test_package_manager();
 
-        let result = walker.collect().unwrap();
+        let result = walker.collect(&pkg_manager).unwrap();
 
         // Should find exactly 2 valid .pets files
         assert_eq!(result.len(), 2);
@@ -113,8 +124,9 @@ mod tests {
     fn test_directory_walker_handles_empty_directory() {
         let temp_dir = TempDir::new().unwrap();
         let walker = DirectoryWalker::new(temp_dir.path());
+        let pkg_manager = test_package_manager();
 
-        let result = walker.collect().unwrap();
+        let result = walker.collect(&pkg_manager).unwrap();
         assert!(result.is_empty());
     }
 
@@ -128,7 +140,8 @@ mod tests {
         writeln!(file, "not a pets file").unwrap();
 
         let walker = DirectoryWalker::new(temp_dir.path());
-        let result = walker.collect().unwrap();
+        let pkg_manager = test_package_manager();
+        let result = walker.collect(&pkg_manager).unwrap();
 
         assert!(result.is_empty());
     }

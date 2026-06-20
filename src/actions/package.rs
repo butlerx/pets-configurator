@@ -12,15 +12,9 @@ impl Package {
     pub fn new(name: String, default_package_manager: &PackageManager) -> Self {
         let (name, package_manager) = match name.split_once(':') {
             Some((manager, name)) => {
-                let package_manager = match manager {
-                    "apt" => PackageManager::Apt,
-                    "yum" => PackageManager::Yum,
-                    "apk" => PackageManager::Apk,
-                    "yay" => PackageManager::Yay,
-                    "pacman" => PackageManager::Pacman,
-                    "cargo" => PackageManager::Cargo,
-                    _ => default_package_manager.clone(),
-                };
+                let package_manager = manager
+                    .parse::<PackageManager>()
+                    .unwrap_or_else(|_| default_package_manager.clone());
                 (name.to_string(), package_manager)
             }
             None => (name, default_package_manager.clone()),
@@ -102,7 +96,7 @@ impl Package {
                     self.package_manager.clone(),
                 )),
             },
-            PackageManager::Homebrew if !stdout.is_empty() => match stdout.split_once(":") {
+            PackageManager::Homebrew if !stdout.is_empty() => match stdout.split_once(':') {
                 Some((name, _)) if name.ends_with(&self.name) => {
                     log::debug!("{} is a valid package name", self.name);
                     Ok(())
@@ -145,9 +139,8 @@ impl Package {
                 };
 
                 for line in stdout.lines() {
-                    match line.trim().split_once(": ") {
-                        Some(("Installed", version)) => return Ok(version != "(none)"),
-                        _ => continue,
+                    if let Some(("Installed", version)) = line.trim().split_once(": ") {
+                        return Ok(version != "(none)");
                     }
                 }
 
@@ -195,12 +188,10 @@ impl Package {
             }
             PackageManager::Homebrew => {
                 match Command::new("brew")
-                    .args(["list", "-1", &self.name])
+                    .args(["list", "--formula", "-1", &self.name])
                     .output()
                 {
-                    Ok(output) => {
-                        Ok(self.name == str::from_utf8(&output.stdout).unwrap_or_default().trim())
-                    }
+                    Ok(output) => Ok(output.status.success()),
                     Err(_) => Err(ActionError::NoPackageManager),
                 }
             }
@@ -229,9 +220,18 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_pkg_is_valid() {
         let family = package_manager::which().unwrap();
         let pkg = Package::new("coreutils".to_string(), &family);
+        assert!(pkg.is_valid().is_ok());
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_pkg_is_valid() {
+        let family = package_manager::which().unwrap();
+        let pkg = Package::new("wget".to_string(), &family);
         assert!(pkg.is_valid().is_ok());
     }
 
@@ -243,6 +243,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_is_installed() {
         let family = package_manager::which().unwrap();
         let pkg = Package::new("binutils".to_string(), &family);
@@ -250,9 +251,26 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
+    fn test_is_installed() {
+        let family = package_manager::which().unwrap();
+        let pkg = Package::new("wget".to_string(), &family);
+        assert!(pkg.is_installed().unwrap());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
     fn test_is_not_installed() {
         let family = package_manager::which().unwrap();
         let pkg = Package::new("abiword".to_string(), &family);
+        assert!(!pkg.is_installed().unwrap());
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_is_not_installed() {
+        let family = package_manager::which().unwrap();
+        let pkg = Package::new("lynx".to_string(), &family);
         assert!(!pkg.is_installed().unwrap());
     }
 

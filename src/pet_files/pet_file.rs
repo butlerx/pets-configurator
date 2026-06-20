@@ -1,7 +1,6 @@
 use super::{destination, mode, parser};
-use crate::actions::{package_manager, Action, ActionError, Cause, Package};
+use crate::actions::{package_manager::PackageManager, Action, ActionError, Cause, Package};
 use std::{
-    convert::TryFrom,
     fs,
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::PathBuf,
@@ -20,15 +19,20 @@ pub struct PetsFile {
     post: Option<Vec<String>>,
 }
 
-impl TryFrom<&PathBuf> for PetsFile {
-    type Error = parser::ParseError;
-
-    fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
+impl PetsFile {
+    pub fn from_path(
+        path: &PathBuf,
+        package_manager: &PackageManager,
+    ) -> Result<Self, parser::ParseError> {
         let modelines = parser::read_modelines(path)?;
         if modelines.is_empty() {
             return Err(parser::ParseError::NotPetsFile);
         }
-        log::debug!("{} pets modelines found in {:?}", modelines.len(), path);
+        log::debug!(
+            "{} pets modelines found in {}",
+            modelines.len(),
+            path.display()
+        );
 
         // Get absolute path to the source.
         let abs = fs::canonicalize(path)?;
@@ -51,11 +55,10 @@ impl TryFrom<&PathBuf> for PetsFile {
             None => mode::Mode::default(),
         };
 
-        let family = package_manager::which()?;
         let pkgs = match modelines.get("package") {
             Some(pkgs) => pkgs
                 .iter()
-                .map(|pkg| Package::new(pkg.to_string(), &family))
+                .map(|pkg| Package::new(pkg.clone(), package_manager))
                 .collect(),
             None => Vec::new(),
         };
@@ -116,7 +119,7 @@ impl TryFrom<&PathBuf> for PetsFile {
             })
             .unwrap_or_default();
 
-        log::debug!("'{:?}' pets syntax OK", path);
+        log::debug!("'{}' pets syntax OK", path.display());
         Ok(Self {
             source,
             dest,
@@ -128,9 +131,7 @@ impl TryFrom<&PathBuf> for PetsFile {
             post,
         })
     }
-}
 
-impl PetsFile {
     pub fn destination(&self) -> String {
         self.dest.to_string()
     }
@@ -150,14 +151,10 @@ impl PetsFile {
         // Check if the specified package(s) exists
         for pkg in &self.pkgs {
             match pkg.is_valid() {
-                Ok(()) => continue,
+                Ok(()) | Err(ActionError::NoPackageManager) => {}
                 Err(err) => {
-                    if let ActionError::NoPackageManager = err {
-                        continue;
-                    } else {
-                        log::error!("Invalid configuration file, {}", err);
-                        return false;
-                    }
+                    log::error!("Invalid configuration file, {err}");
+                    return false;
                 }
             }
         }
@@ -192,42 +189,54 @@ impl PetsFile {
             .output();
 
         match pre_command {
-            Ok(output) => {
-                log::info!("pre-update command {:?} successful", pre);
+            Ok(output) if output.status.success() => {
+                log::info!("pre-update command {pre:?} successful");
                 if !output.stdout.is_empty() {
                     let stdout = std::str::from_utf8(&output.stdout)
                         .unwrap_or_default()
                         .to_string();
 
-                    log::info!("stdout: {}", stdout);
+                    log::info!("stdout: {stdout}");
                 }
                 if !output.stderr.is_empty() {
                     let stderr = std::str::from_utf8(&output.stderr)
                         .unwrap_or_default()
                         .to_string();
-                    log::error!("stderr: {}", stderr);
+                    log::warn!("stderr: {stderr}");
                 }
                 true
+            }
+            Ok(output) => {
+                let stderr = if output.stderr.is_empty() {
+                    "no error output".to_string()
+                } else {
+                    std::str::from_utf8(&output.stderr)
+                        .unwrap_or_default()
+                        .to_string()
+                };
+                log::error!(
+                    "pre-update command {pre:?} failed with status {}: {stderr}",
+                    output.status
+                );
+                false
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound && path_error_ok => {
                 // The command has failed because the validation command itself is
                 // missing. This could be a chicken-and-egg problem: at this stage
                 // configuration is not validated yet, hence any "package" directives
                 // have not been applied.  Do not consider this as a failure, for now.
-                log::info!(
-                    "pre-update command {:?} failed due to PathError. Ignoring for now",
-                    pre
-                );
+                log::info!("pre-update command {pre:?} failed due to PathError. Ignoring for now");
                 true
             }
             Err(err) => {
-                log::error!("pre-update command {:?}: {}\n", pre, err);
+                log::error!("pre-update command {pre:?}: {err}\n");
                 false
             }
         }
     }
 
     /// returns a chown `Action` or nil if none is needed.
+    #[allow(clippy::similar_names)]
     fn chown(&self) -> Option<Action> {
         // Build arg (eg: 'root:staff', 'root', ':staff')
         let mut arg = String::new();
@@ -267,9 +276,12 @@ impl PetsFile {
         }
 
         // The action to (possibly) perform is a chown of the file.
-        let action = Action::new(
+        let action = Action::chown(
             Cause::Owner,
-            vec!["chown".to_string(), arg.clone(), self.dest.to_string()],
+            PathBuf::from(self.dest.to_string()),
+            want_user_id,
+            want_group_id,
+            arg.clone(),
         );
 
         let destination = self.dest.to_string();
@@ -282,50 +294,35 @@ impl PetsFile {
                     return Some(action);
                 }
                 std::io::ErrorKind::PermissionDenied => {
-                    log::error!("permission denied in chown(): {}", e);
+                    log::error!("permission denied in chown(): {e}");
                     return Some(action.use_sudo());
                 }
                 _ => {
-                    log::error!("unexpected error in chown(): {}", e);
+                    log::error!("unexpected error in chown(): {e}");
                     return None;
                 }
             },
         };
 
-        let stat_uid = stat.uid();
-        let stat_gid = stat.gid();
+        let file_uid = stat.uid();
+        let file_gid = stat.gid();
 
         // Get the file ownership details from the metadata
         if let Some(want_uid) = want_user_id {
-            if stat_uid != want_uid {
-                log::info!(
-                    "{} is owned by uid {} instead of {}",
-                    destination,
-                    stat_uid,
-                    want_uid
-                );
+            if file_uid != want_uid {
+                log::info!("{destination} is owned by uid {file_uid} instead of {want_uid}");
                 return Some(action);
             }
         }
 
         if let Some(want_gid) = want_group_id {
-            if stat_gid != want_gid {
-                log::info!(
-                    "{} is owned by gid {} instead of {}",
-                    destination,
-                    stat_gid,
-                    want_gid
-                );
+            if file_gid != want_gid {
+                log::info!("{destination} is owned by gid {file_gid} instead of {want_gid}");
                 return Some(action);
             }
         }
 
-        log::debug!(
-            "{} is owned by {}:{} already",
-            destination,
-            stat_uid,
-            stat_gid
-        );
+        log::debug!("{destination} is owned by {file_uid}:{file_gid} already");
         None
     }
 
@@ -335,13 +332,10 @@ impl PetsFile {
             return None;
         }
 
-        let action = Action::new(
+        let action = Action::chmod(
             Cause::Mode,
-            vec![
-                "chmod".to_string(),
-                self.mode.to_string(),
-                self.dest.to_string(),
-            ],
+            PathBuf::from(self.dest.to_string()),
+            self.mode.as_raw(),
         );
 
         // stat(2) the destination file to see if a chmod is needed
@@ -351,7 +345,7 @@ impl PetsFile {
                 return Some(action);
             }
             Err(e) => {
-                log::error!("unexpected error in chmod(): {}", e);
+                log::error!("unexpected error in chmod(): {e}");
                 return None;
             }
         };
@@ -386,12 +380,11 @@ impl From<&PetsFile> for Vec<Action> {
         if actions.is_empty() {
             actions
         } else {
-            val.post
+            let post = val
+                .post
                 .as_ref()
-                .map(|post| Action::new(Cause::Post, post.clone()))
-                .into_iter()
-                .chain(actions)
-                .collect()
+                .map(|post| Action::command(Cause::Post, post.clone()));
+            actions.into_iter().chain(post).collect()
         }
     }
 }

@@ -40,7 +40,7 @@ impl From<Destination> for String {
 }
 
 impl Destination {
-    pub fn new(dest: &String, is_symlink: bool, is_dir: bool) -> Self {
+    pub fn new(dest: &str, is_symlink: bool, is_dir: bool) -> Self {
         let dest_path = match dest.expand_home() {
             Ok(path) => path,
             _ => PathBuf::from(dest),
@@ -108,14 +108,10 @@ impl Destination {
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // dest does not exist yet. Happy path, we are gonna create it!
-                Some(Action::new(
+                Some(Action::symlink(
                     Cause::Link,
-                    vec![
-                        String::from("ln"),
-                        String::from("-s"),
-                        source,
-                        self.dest.to_string(),
-                    ],
+                    PathBuf::from(source),
+                    PathBuf::from(&self.dest),
                 ))
             }
             Err(err) => {
@@ -147,13 +143,9 @@ impl Destination {
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 log::debug!("{} does not exist yet", self.directory);
                 // Directory does not exist yet. Happy path, we are gonna create it!
-                Some(Action::new(
+                Some(Action::create_dir(
                     Cause::Dir,
-                    vec![
-                        String::from("mkdir"),
-                        String::from("-p"),
-                        self.directory.clone(),
-                    ],
+                    PathBuf::from(&self.directory),
                 ))
             }
             Err(err) => {
@@ -181,17 +173,19 @@ impl Destination {
             source.to_string()
         };
 
-        let command = vec![String::from("cp"), source.clone(), self.dest.to_string()];
-
         if !Path::new(&self.dest).exists() {
             log::debug!("{} does not exist yet", self.dest);
-            return Some(Action::new(Cause::Create, command));
+            return Some(Action::copy_file(
+                Cause::Create,
+                PathBuf::from(&source),
+                PathBuf::from(&self.dest),
+            ));
         }
 
         let sha_source = match sha256(&source) {
             Ok(hash) => hash,
             Err(err) => {
-                log::error!("cannot determine sha256 of Source file {}: {}", source, err);
+                log::error!("cannot determine sha256 of Source file {source}: {err}");
                 return None;
             }
         };
@@ -214,7 +208,11 @@ impl Destination {
                     self.dest,
                     sha_dest
                 );
-                Some(Action::new(Cause::Update, command))
+                Some(Action::copy_file(
+                    Cause::Update,
+                    PathBuf::from(&source),
+                    PathBuf::from(&self.dest),
+                ))
             }
             Err(err) => {
                 log::error!(
@@ -292,14 +290,10 @@ mod tests {
         // The link does not exist yet, so needs_link should return Cause::Link
         assert_eq!(
             dest.needs_link(&source_path).unwrap(),
-            Action::new(
+            Action::symlink(
                 Cause::Link,
-                vec![
-                    String::from("ln"),
-                    String::from("-s"),
-                    source_path.clone(),
-                    dest_path.clone()
-                ]
+                PathBuf::from(&source_path),
+                PathBuf::from(&dest_path),
             )
         );
     }
@@ -314,7 +308,7 @@ mod tests {
         File::create(&source_path).unwrap();
         std::os::unix::fs::symlink(&source_path, &dest_path).unwrap();
 
-        let dest = Destination::new(&dest_path.to_str().unwrap().to_string(), true, false);
+        let dest = Destination::new(dest_path.to_str().unwrap(), true, false);
         assert_eq!(dest.needs_link(source_path.to_str().unwrap()), None);
     }
 
@@ -322,19 +316,12 @@ mod tests {
     fn test_destination_needs_dir_creation() {
         let dir = tempdir().unwrap();
         let dest_path = dir.path().join("non_existing_dir/path");
-        let dest = Destination::new(&dest_path.to_str().unwrap().to_string(), false, false);
+        let dest = Destination::new(dest_path.to_str().unwrap(), false, false);
 
         // needs_dir should return Cause::Dir because the directory does not exist
         assert_eq!(
             dest.needs_dir().unwrap(),
-            Action::new(
-                Cause::Dir,
-                vec![
-                    String::from("mkdir"),
-                    String::from("-p"),
-                    dest_path.parent().unwrap().to_str().unwrap().to_string()
-                ]
-            )
+            Action::create_dir(Cause::Dir, PathBuf::from(dest_path.parent().unwrap()),)
         );
     }
 
@@ -343,7 +330,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let existing_dir = dir.path().join("existing_dir");
         fs::create_dir(&existing_dir).unwrap();
-        let dest = Destination::new(&existing_dir.to_str().unwrap().to_string(), false, false);
+        let dest = Destination::new(existing_dir.to_str().unwrap(), false, false);
 
         // needs_dir should return Cause::None because the directory already exists
         assert_eq!(dest.needs_dir(), None);
@@ -356,19 +343,12 @@ mod tests {
         fs::write(&source_file, b"content").unwrap();
 
         let dest_file = dir.path().join("dest_file.txt");
-        let dest = Destination::new(&dest_file.to_str().unwrap().to_string(), false, false);
+        let dest = Destination::new(dest_file.to_str().unwrap(), false, false);
 
         // Destination file does not exist, so needs_copy should return Cause::Create
         assert_eq!(
             dest.needs_copy(source_file.to_str().unwrap()).unwrap(),
-            Action::new(
-                Cause::Create,
-                vec![
-                    String::from("cp"),
-                    source_file.to_str().unwrap().to_string(),
-                    dest_file.to_str().unwrap().to_string()
-                ]
-            )
+            Action::copy_file(Cause::Create, source_file.clone(), dest_file.clone(),)
         );
     }
 
@@ -382,19 +362,12 @@ mod tests {
         fs::write(&source_file, b"new content").unwrap();
         fs::write(&dest_file, b"old content").unwrap();
 
-        let dest = Destination::new(&dest_file.to_str().unwrap().to_string(), false, false);
+        let dest = Destination::new(dest_file.to_str().unwrap(), false, false);
 
         // Destination exists and content is different, so needs_copy should return Cause::Update
         assert_eq!(
             dest.needs_copy(source_file.to_str().unwrap()).unwrap(),
-            Action::new(
-                Cause::Update,
-                vec![
-                    String::from("cp"),
-                    source_file.to_str().unwrap().to_string(),
-                    dest_file.to_str().unwrap().to_string()
-                ]
-            )
+            Action::copy_file(Cause::Update, source_file.clone(), dest_file.clone(),)
         );
     }
 
@@ -408,7 +381,7 @@ mod tests {
         fs::write(&source_file, b"same content").unwrap();
         fs::write(&dest_file, b"same content").unwrap();
 
-        let dest = Destination::new(&dest_file.to_str().unwrap().to_string(), false, false);
+        let dest = Destination::new(dest_file.to_str().unwrap(), false, false);
 
         // Destination exists and content is identical, so needs_copy should return Cause::None
         assert_eq!(dest.needs_copy(source_file.to_str().unwrap()), None);
