@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/butlerx/pets-configurator/compare/v0.4.0...v0.5.0) (2026-06-20)
+
+
+### Features
+
+* add list/status command, --quiet flag, and remove modeline limit ([459020e](https://github.com/butlerx/pets-configurator/commit/459020e8782823e518234364eb9b3f23abbf4161))
+* add pip/pip3 package manager support ([08aec90](https://github.com/butlerx/pets-configurator/commit/08aec90624ce7771ff6ece3fa58f05b1be984a05))
+
+
+### Code Improvements
+
+* split commands.rs into one file per command ([048c289](https://github.com/butlerx/pets-configurator/commit/048c2890041113832e6562956033341f1a34b357))
+
 ## [0.4.0](https://github.com/butlerx/pets-configurator/compare/v0.3.3...v0.4.0) (2026-06-20)
 
 
