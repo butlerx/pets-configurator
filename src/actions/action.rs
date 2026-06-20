@@ -5,7 +5,7 @@ use std::{
     os::unix::fs as unix_fs,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 pub struct RunConfig {
@@ -229,46 +229,7 @@ impl Action {
             Operation::Command {
                 args,
                 requires_sudo,
-            } => {
-                let mut cmd = if requires_sudo {
-                    let mut c = Command::new("sudo");
-                    c.arg(&args[0]);
-                    c.args(&args[1..]);
-                    c
-                } else {
-                    let mut c = Command::new(&args[0]);
-                    c.args(&args[1..]);
-                    c
-                };
-
-                if cause == Cause::Pkg {
-                    cmd.env("DEBIAN_FRONTEND", "noninteractive");
-                }
-
-                let output = match cmd.output() {
-                    Ok(output) => output,
-                    // if the package manager is not found, return Ok(0)
-                    Err(_) if cause == Cause::Pkg => return Ok(0),
-                    Err(err) => return Err(err.into()),
-                };
-
-                if !output.stdout.is_empty() {
-                    log::info!("{} => {}", args[0], String::from_utf8_lossy(&output.stdout));
-                }
-
-                let status = output.status.code().unwrap_or(1);
-
-                if !output.status.success() {
-                    let std_err = if output.stderr.is_empty() {
-                        "No error message".to_string()
-                    } else {
-                        String::from_utf8_lossy(&output.stderr).to_string()
-                    };
-
-                    return Err(ActionError::ExecError(args[0].clone(), status, std_err));
-                }
-                Ok(status)
-            }
+            } => run_command(&args, requires_sudo, cause),
         }
     }
 
@@ -285,6 +246,63 @@ impl Action {
 
         Ok(())
     }
+}
+
+fn build_command(args: &[String], requires_sudo: bool) -> Command {
+    if requires_sudo {
+        let mut c = Command::new("sudo");
+        c.arg(&args[0]);
+        c.args(&args[1..]);
+        c
+    } else {
+        let mut c = Command::new(&args[0]);
+        c.args(&args[1..]);
+        c
+    }
+}
+
+fn run_command(args: &[String], requires_sudo: bool, cause: Cause) -> Result<i32, ActionError> {
+    let mut cmd = build_command(args, requires_sudo);
+
+    if cause == Cause::Pkg {
+        cmd.env("DEBIAN_FRONTEND", "noninteractive");
+        cmd.stdin(Stdio::inherit());
+        cmd.stdout(Stdio::inherit());
+        cmd.stderr(Stdio::inherit());
+
+        let Ok(status) = cmd.status() else {
+            return Ok(0);
+        };
+
+        let code = status.code().unwrap_or(1);
+        return if status.success() {
+            Ok(code)
+        } else {
+            Err(ActionError::ExecError(
+                args[0].clone(),
+                code,
+                "package install failed".to_string(),
+            ))
+        };
+    }
+
+    let output = cmd.output()?;
+
+    if !output.stdout.is_empty() {
+        log::info!("{} => {}", args[0], String::from_utf8_lossy(&output.stdout));
+    }
+
+    let status = output.status.code().unwrap_or(1);
+
+    if !output.status.success() {
+        let std_err = if output.stderr.is_empty() {
+            "No error message".to_string()
+        } else {
+            String::from_utf8_lossy(&output.stderr).to_string()
+        };
+        return Err(ActionError::ExecError(args[0].clone(), status, std_err));
+    }
+    Ok(status)
 }
 
 fn backup_path_for(dest: &Path) -> PathBuf {

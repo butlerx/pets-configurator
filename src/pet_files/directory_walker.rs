@@ -18,6 +18,7 @@ impl<P: AsRef<Path>> DirectoryWalker<P> {
 
     fn into_iter(self) -> impl Iterator<Item = Result<PathBuf, ParseError>> {
         WalkDir::new(self.directory)
+            .follow_links(true)
             .into_iter()
             .filter_entry(|e| !is_git_dir(e))
             .filter_map(std::result::Result::ok)
@@ -134,7 +135,6 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("not_pets.txt");
 
-        // Create a non-pets file
         let mut file = File::create(file_path).unwrap();
         writeln!(file, "not a pets file").unwrap();
 
@@ -143,5 +143,23 @@ mod tests {
         let result = walker.collect(pkg_manager).unwrap();
 
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_directory_walker_follows_symlinks() {
+        let target_dir = TempDir::new().unwrap();
+        let target_file = target_dir.path().join("linked.conf");
+        let mut file = File::create(&target_file).unwrap();
+        writeln!(file, "# pets: symlink=/tmp/pets-test-follow-symlinks").unwrap();
+
+        let walk_dir = TempDir::new().unwrap();
+        let link_path = walk_dir.path().join("linked_dir");
+        std::os::unix::fs::symlink(target_dir.path(), &link_path).unwrap();
+
+        let walker = DirectoryWalker::new(walk_dir.path());
+        let pkg_manager = test_package_manager();
+        let result = walker.collect(pkg_manager).unwrap();
+
+        assert_eq!(result.len(), 1);
     }
 }
