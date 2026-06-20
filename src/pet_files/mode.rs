@@ -77,4 +77,23 @@ mod tests {
         assert!(mode.is_ok());
         assert_eq!(mode.unwrap().0, 0o644);
     }
+
+    #[test]
+    fn test_mode_display_outputs_octal() {
+        let mode = Mode::try_from(&"644".to_string()).unwrap();
+        assert_eq!(mode.to_string(), "644");
+    }
+
+    #[test]
+    fn test_mode_partial_eq_u32_masks_to_permission_bits() {
+        let mode = Mode::try_from(&"644".to_string()).unwrap();
+        assert_eq!(mode, 0o100_644);
+        assert_ne!(mode, 0o100_600);
+    }
+
+    #[test]
+    fn test_mode_as_raw_returns_inner_value() {
+        let mode = Mode::try_from(&"755".to_string()).unwrap();
+        assert_eq!(mode.as_raw(), 0o755);
+    }
 }

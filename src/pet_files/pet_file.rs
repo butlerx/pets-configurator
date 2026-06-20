@@ -387,3 +387,323 @@ impl From<&PetsFile> for Vec<Action> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actions::package_manager;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    fn write_pets_file(path: &PathBuf, lines: &[&str], body: &str) {
+        let mut file = std::fs::File::create(path).unwrap();
+        for line in lines {
+            writeln!(file, "{line}").unwrap();
+        }
+        writeln!(file, "{body}").unwrap();
+    }
+
+    fn package_manager_for_tests() -> PackageManager {
+        package_manager::which().unwrap()
+    }
+
+    #[test]
+    fn test_from_path_parses_destfile_directive() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("config.conf");
+        let dest = dir.path().join("dest.conf");
+        write_pets_file(
+            &source,
+            &[&format!("# pets: destfile={}", dest.display())],
+            "value=true",
+        );
+
+        let parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        assert_eq!(parsed.destination(), dest.to_string_lossy());
+    }
+
+    #[test]
+    fn test_from_path_parses_symlink_directive() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("config.conf");
+        let link_path = dir.path().join("config-link");
+        write_pets_file(
+            &source,
+            &[&format!("# pets: symlink={}", link_path.display())],
+            "value=true",
+        );
+
+        let parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        assert!(parsed.dest.is_symlink());
+        assert_eq!(parsed.destination(), link_path.to_string_lossy());
+    }
+
+    #[test]
+    fn test_from_path_missing_destfile_or_symlink_returns_error() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("config.conf");
+        write_pets_file(&source, &["# pets: package=exa"], "value=true");
+
+        let parsed = PetsFile::from_path(&source, package_manager_for_tests());
+        assert!(matches!(
+            parsed,
+            Err(parser::ParseError::MissingDestFile(_))
+        ));
+    }
+
+    #[test]
+    fn test_from_path_parses_mode_directive() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("config.conf");
+        let dest = dir.path().join("dest.conf");
+        write_pets_file(
+            &source,
+            &[
+                &format!("# pets: destfile={}", dest.display()),
+                "# pets: mode=0640",
+            ],
+            "value=true",
+        );
+
+        let parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        assert_eq!(parsed.mode.as_raw(), 0o640);
+    }
+
+    #[test]
+    fn test_from_path_parses_package_directive() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("config.conf");
+        let dest = dir.path().join("dest.conf");
+        write_pets_file(
+            &source,
+            &[
+                &format!("# pets: destfile={}", dest.display()),
+                "# pets: package=exa",
+                "# pets: package=cargo:bat",
+            ],
+            "value=true",
+        );
+
+        let parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        let packages = parsed.packages();
+        assert_eq!(packages.len(), 2);
+        assert_eq!(packages[0].name, "exa");
+        assert_eq!(packages[1].name, "bat");
+        assert_eq!(packages[1].package_manager, PackageManager::Cargo);
+    }
+
+    #[test]
+    fn test_from_path_parses_owner_group_directives() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("config.conf");
+        let dest = dir.path().join("dest.conf");
+        let current_user = users::get_user_by_uid(users::get_current_uid()).unwrap();
+        let current_group = users::get_group_by_gid(users::get_current_gid()).unwrap();
+        let user_name = current_user.name().to_string_lossy().into_owned();
+        let group_name = current_group.name().to_string_lossy().into_owned();
+
+        write_pets_file(
+            &source,
+            &[
+                &format!("# pets: destfile={}", dest.display()),
+                &format!("# pets: owner={user_name}"),
+                &format!("# pets: group={group_name}"),
+            ],
+            "value=true",
+        );
+
+        let parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        assert_eq!(
+            parsed.user.as_ref().map(users::User::uid),
+            Some(current_user.uid())
+        );
+        assert_eq!(
+            parsed.group.as_ref().map(users::Group::gid),
+            Some(current_group.gid())
+        );
+    }
+
+    #[test]
+    fn test_from_path_unknown_owner_falls_back_to_current_user() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("config.conf");
+        let dest = dir.path().join("dest.conf");
+        let current_uid = users::get_current_uid();
+        write_pets_file(
+            &source,
+            &[
+                &format!("# pets: destfile={}", dest.display()),
+                "# pets: owner=definitely_unknown_user_name_12345",
+            ],
+            "value=true",
+        );
+
+        let parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        assert_eq!(
+            parsed.user.as_ref().map(users::User::uid),
+            Some(current_uid)
+        );
+    }
+
+    #[test]
+    fn test_from_path_parses_pre_post_and_when_directives() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("config.conf");
+        let dest = dir.path().join("dest.conf");
+        let current_os = if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "linux"
+        };
+
+        write_pets_file(
+            &source,
+            &[
+                &format!("# pets: destfile={}", dest.display()),
+                "# pets: pre=/usr/bin/true --check",
+                "# pets: post=/bin/echo reloaded",
+                &format!("# pets: when=os:{current_os}"),
+            ],
+            "value=true",
+        );
+
+        let parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        assert_eq!(
+            parsed.pre,
+            Some(vec!["/usr/bin/true".to_string(), "--check".to_string()])
+        );
+        assert_eq!(
+            parsed.post,
+            Some(vec!["/bin/echo".to_string(), "reloaded".to_string()])
+        );
+        assert_eq!(
+            parsed.conditions,
+            vec![Condition::Os(current_os.to_string())]
+        );
+        assert!(parsed.matches_conditions());
+    }
+
+    #[test]
+    fn test_getters_and_validity_with_no_conditions() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("config.conf");
+        let dest = dir.path().join("dest.conf");
+        write_pets_file(
+            &source,
+            &[&format!("# pets: destfile={}", dest.display())],
+            "same-content",
+        );
+
+        let parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        let expected_source = std::fs::canonicalize(&source)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(parsed.source(), expected_source);
+        assert_eq!(parsed.destination(), dest.to_string_lossy());
+        assert!(parsed.packages().is_empty());
+        assert!(parsed.matches_conditions());
+        assert!(parsed.is_valid());
+    }
+
+    #[test]
+    fn test_actions_from_pets_file_generates_copy_action() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("copy_source.conf");
+        let dest = dir.path().join("copy_dest.conf");
+        write_pets_file(
+            &source,
+            &[&format!("# pets: destfile={}", dest.display())],
+            "copy-content",
+        );
+
+        let mut parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        parsed.user = None;
+        parsed.group = None;
+
+        let source_abs = std::fs::canonicalize(&source).unwrap();
+        let actions: Vec<Action> = (&parsed).into();
+        assert_eq!(
+            actions,
+            vec![Action::copy_file(Cause::Create, source_abs, dest.clone())]
+        );
+    }
+
+    #[test]
+    fn test_actions_from_pets_file_generates_symlink_action() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("link_source.conf");
+        let dest = dir.path().join("link_dest");
+        write_pets_file(
+            &source,
+            &[&format!("# pets: symlink={}", dest.display())],
+            "link-content",
+        );
+
+        let mut parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        parsed.user = None;
+        parsed.group = None;
+
+        let source_abs = std::fs::canonicalize(&source).unwrap();
+        let actions: Vec<Action> = (&parsed).into();
+        assert_eq!(
+            actions,
+            vec![Action::symlink(Cause::Link, source_abs, dest)]
+        );
+    }
+
+    #[test]
+    fn test_actions_from_pets_file_appends_post_after_file_actions() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("post_source.conf");
+        let dest = dir.path().join("post_dest.conf");
+        write_pets_file(
+            &source,
+            &[
+                &format!("# pets: destfile={}", dest.display()),
+                "# pets: post=/bin/echo done",
+            ],
+            "copy-content",
+        );
+
+        let mut parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        parsed.user = None;
+        parsed.group = None;
+
+        let source_abs = std::fs::canonicalize(&source).unwrap();
+        let actions: Vec<Action> = (&parsed).into();
+        assert_eq!(actions.len(), 2);
+        assert_eq!(
+            actions[0],
+            Action::copy_file(Cause::Create, source_abs, dest.clone())
+        );
+        assert_eq!(
+            actions[1],
+            Action::command(
+                Cause::Post,
+                vec!["/bin/echo".to_string(), "done".to_string()]
+            )
+        );
+    }
+
+    #[test]
+    fn test_actions_from_pets_file_in_sync_generates_no_actions() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("sync_source.conf");
+        let dest = dir.path().join("sync_dest.conf");
+        write_pets_file(
+            &source,
+            &[&format!("# pets: destfile={}", dest.display())],
+            "identical-content",
+        );
+
+        std::fs::copy(&source, &dest).unwrap();
+
+        let mut parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
+        parsed.user = None;
+        parsed.group = None;
+
+        let actions: Vec<Action> = (&parsed).into();
+        assert!(actions.is_empty());
+    }
+}

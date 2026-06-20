@@ -371,3 +371,204 @@ fn atomic_copy(source: &Path, dest: &Path) -> io::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    fn run_config(dry_run: bool, backup: bool) -> RunConfig {
+        RunConfig { dry_run, backup }
+    }
+
+    #[test]
+    fn test_action_display_for_each_operation_variant() {
+        let copy = Action::copy_file(
+            Cause::Create,
+            PathBuf::from("/tmp/source"),
+            PathBuf::from("/tmp/dest"),
+        );
+        assert!(copy.to_string().contains("cp /tmp/source /tmp/dest"));
+
+        let symlink = Action::symlink(
+            Cause::Link,
+            PathBuf::from("/tmp/source"),
+            PathBuf::from("/tmp/link"),
+        );
+        assert!(symlink.to_string().contains("ln -s /tmp/source /tmp/link"));
+
+        let mkdir = Action::create_dir(Cause::Dir, PathBuf::from("/tmp/newdir"));
+        assert!(mkdir.to_string().contains("mkdir -p /tmp/newdir"));
+
+        let chmod = Action::chmod(Cause::Mode, PathBuf::from("/tmp/file"), 0o644);
+        assert!(chmod.to_string().contains("chmod 644 /tmp/file"));
+
+        let chown = Action::chown(
+            Cause::Owner,
+            PathBuf::from("/tmp/file"),
+            Some(0),
+            Some(0),
+            "root:root".to_string(),
+        );
+        assert!(chown.to_string().contains("chown root:root /tmp/file"));
+
+        let command = Action::command(Cause::Post, vec!["echo".to_string(), "hello".to_string()]);
+        assert!(command.to_string().contains("echo hello"));
+    }
+
+    #[test]
+    fn test_action_cause_returns_stored_cause() {
+        let action = Action::create_dir(Cause::Dir, PathBuf::from("/tmp/test"));
+        assert_eq!(action.cause(), Cause::Dir);
+    }
+
+    #[test]
+    fn test_perform_dry_run_returns_ok_for_each_operation_type() {
+        let missing = PathBuf::from("/definitely/missing/path");
+        let dry_run = run_config(true, false);
+
+        let actions = vec![
+            Action::copy_file(Cause::Create, missing.clone(), missing.clone()),
+            Action::symlink(Cause::Link, missing.clone(), missing.clone()),
+            Action::create_dir(Cause::Dir, missing.clone()),
+            Action::chmod(Cause::Mode, missing.clone(), 0o600),
+            Action::chown(
+                Cause::Owner,
+                missing.clone(),
+                Some(0),
+                Some(0),
+                "root:root".to_string(),
+            ),
+            Action::command(Cause::Post, vec!["not-a-real-command".to_string()]),
+        ];
+
+        for action in actions {
+            assert_eq!(action.perform(&dry_run).unwrap(), 0);
+        }
+    }
+
+    #[test]
+    fn test_perform_copy_creates_dest_file() {
+        let tmp = tempdir().unwrap();
+        let src = tmp.path().join("source.txt");
+        let dest = tmp.path().join("dest.txt");
+        fs::write(&src, "hello world\n").unwrap();
+
+        let action = Action::copy_file(Cause::Create, src.clone(), dest.clone());
+        let config = run_config(false, false);
+        assert_eq!(action.perform(&config).unwrap(), 0);
+        assert_eq!(fs::read_to_string(dest).unwrap(), "hello world\n");
+    }
+
+    #[test]
+    fn test_perform_copy_with_backup_when_updating_existing_file() {
+        let tmp = tempdir().unwrap();
+        let src = tmp.path().join("source.txt");
+        let dest = tmp.path().join("dest.txt");
+        fs::write(&src, "new-content\n").unwrap();
+        fs::write(&dest, "old-content\n").unwrap();
+
+        let action = Action::copy_file(Cause::Update, src.clone(), dest.clone());
+        let config = run_config(false, true);
+        assert_eq!(action.perform(&config).unwrap(), 0);
+
+        let backup = backup_path_for(&dest);
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "new-content\n");
+        assert_eq!(fs::read_to_string(&backup).unwrap(), "old-content\n");
+    }
+
+    #[test]
+    fn test_perform_symlink_creates_symlink() {
+        let tmp = tempdir().unwrap();
+        let src = tmp.path().join("source.txt");
+        let dest = tmp.path().join("dest.link");
+        fs::write(&src, "symlink-target").unwrap();
+
+        let action = Action::symlink(Cause::Link, src.clone(), dest.clone());
+        let config = run_config(false, false);
+        assert_eq!(action.perform(&config).unwrap(), 0);
+
+        let link_target = fs::read_link(dest).unwrap();
+        assert_eq!(link_target, src);
+    }
+
+    #[test]
+    fn test_perform_create_dir_creates_directory_tree() {
+        let tmp = tempdir().unwrap();
+        let target = tmp.path().join("a").join("b").join("c");
+
+        let action = Action::create_dir(Cause::Dir, target.clone());
+        let config = run_config(false, false);
+        assert_eq!(action.perform(&config).unwrap(), 0);
+        assert!(target.is_dir());
+    }
+
+    #[test]
+    fn test_perform_chmod_sets_permissions() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("file.txt");
+        fs::write(&path, "chmod-me").unwrap();
+
+        let action = Action::chmod(Cause::Mode, path.clone(), 0o640);
+        let config = run_config(false, false);
+        assert_eq!(action.perform(&config).unwrap(), 0);
+
+        let mode = fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o640);
+    }
+
+    #[test]
+    fn test_perform_command_executes_simple_command() {
+        let tmp = tempdir().unwrap();
+        let output_file = tmp.path().join("out.txt");
+        let script = format!("echo hello > {}", output_file.display());
+        let action = Action::command(
+            Cause::Post,
+            vec!["sh".to_string(), "-c".to_string(), script],
+        );
+
+        let config = run_config(false, false);
+        assert_eq!(action.perform(&config).unwrap(), 0);
+        assert_eq!(fs::read_to_string(output_file).unwrap(), "hello\n");
+    }
+
+    #[test]
+    fn test_atomic_copy_creates_file_at_destination() {
+        let tmp = tempdir().unwrap();
+        let src = tmp.path().join("source.txt");
+        let dest = tmp.path().join("dest.txt");
+        fs::write(&src, "atomic").unwrap();
+
+        atomic_copy(&src, &dest).unwrap();
+        assert_eq!(fs::read_to_string(dest).unwrap(), "atomic");
+    }
+
+    #[test]
+    fn test_copy_dir_all_recursively_copies_directory_contents() {
+        let tmp = tempdir().unwrap();
+        let src_root = tmp.path().join("src");
+        let src_nested = src_root.join("nested");
+        let dest_root = tmp.path().join("dest");
+
+        fs::create_dir_all(&src_nested).unwrap();
+        fs::File::create(src_root.join("root.txt"))
+            .unwrap()
+            .write_all(b"root")
+            .unwrap();
+        fs::File::create(src_nested.join("nested.txt"))
+            .unwrap()
+            .write_all(b"nested")
+            .unwrap();
+
+        copy_dir_all(&src_root, &dest_root).unwrap();
+        assert_eq!(
+            fs::read_to_string(dest_root.join("root.txt")).unwrap(),
+            "root"
+        );
+        assert_eq!(
+            fs::read_to_string(dest_root.join("nested").join("nested.txt")).unwrap(),
+            "nested"
+        );
+    }
+}

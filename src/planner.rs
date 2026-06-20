@@ -119,3 +119,58 @@ pub fn plan_actions(files: Vec<PetsFile>) -> Vec<actions::Action> {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{fs::File, io::Write};
+    use tempfile::tempdir;
+
+    fn make_pets_file(
+        dir: &std::path::Path,
+        name: &str,
+        destfile: &str,
+    ) -> Result<PetsFile, crate::pet_files::ParseError> {
+        let path = dir.join(name);
+        let mut file = File::create(&path)?;
+        writeln!(file, "# pets: destfile={destfile}")?;
+        writeln!(file, "body")?;
+        PetsFile::from_path(&path, PackageManager::Cargo)
+    }
+
+    #[test]
+    fn test_check_global_constraints_ok_when_no_duplicate_destfiles() {
+        let tmp = tempdir().unwrap();
+        let file1 = make_pets_file(tmp.path(), "a.conf", "/tmp/pets-test-a").unwrap();
+        let file2 = make_pets_file(tmp.path(), "b.conf", "/tmp/pets-test-b").unwrap();
+
+        let result = check_global_constraints(&[file1, file2]);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_global_constraints_err_on_duplicate_destfiles() {
+        let tmp = tempdir().unwrap();
+        let file1 = make_pets_file(tmp.path(), "a.conf", "/tmp/pets-test-dup").unwrap();
+        let file2 = make_pets_file(tmp.path(), "b.conf", "/tmp/pets-test-dup").unwrap();
+
+        let err = check_global_constraints(&[file1, file2]).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("duplicate definition for '/tmp/pets-test-dup'"));
+        assert!(msg.contains("a.conf") || msg.contains("b.conf"));
+    }
+
+    #[test]
+    fn test_duplicate_definition_error_display() {
+        let err = DuplicateDefinitionError::new(
+            "/etc/example".to_string(),
+            "/pets/a".to_string(),
+            "/pets/b".to_string(),
+        );
+
+        assert_eq!(
+            err.to_string(),
+            "duplicate definition for '/etc/example': '/pets/a' and '/pets/b'"
+        );
+    }
+}

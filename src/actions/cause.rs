@@ -31,3 +31,29 @@ impl fmt::Display for Cause {
         write!(f, "{pets_cause}")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_rendered_contains(cause: Cause, expected: &str) {
+        let rendered = cause.to_string();
+        assert!(
+            rendered.contains(expected),
+            "expected '{rendered}' to contain '{expected}'"
+        );
+    }
+
+    #[test]
+    fn test_display_variants() {
+        assert_rendered_contains(Cause::None, "NONE");
+        assert_rendered_contains(Cause::Pkg, "PACKAGE_INSTALL");
+        assert_rendered_contains(Cause::Create, "FILE_CREATE");
+        assert_rendered_contains(Cause::Update, "FILE_UPDATE");
+        assert_rendered_contains(Cause::Link, "LINK_CREATE");
+        assert_rendered_contains(Cause::Dir, "DIR_CREATE");
+        assert_rendered_contains(Cause::Owner, "OWNER");
+        assert_rendered_contains(Cause::Mode, "CHMOD");
+        assert_rendered_contains(Cause::Post, "POST_UPDATE");
+    }
+}

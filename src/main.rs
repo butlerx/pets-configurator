@@ -3,7 +3,8 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
 use std::{
-    env, fs, io,
+    env, fs,
+    io::{self, Write},
     path::Path,
     process::{self, ExitCode},
     time::Instant,
@@ -145,8 +146,6 @@ fn setup_logging(debug: bool) {
 }
 
 fn acquire_lock() -> Option<fs::File> {
-    use io::Write;
-
     let lock_path = env::var("PETS_LOCK_FILE").unwrap_or_else(|_| "/tmp/pets.lock".to_string());
 
     let file = match fs::OpenOptions::new()

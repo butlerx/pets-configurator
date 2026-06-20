@@ -66,13 +66,12 @@ fn process_pets_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::actions::package_manager;
     use std::{
         fs::{self, File},
         io::Write,
     };
     use tempfile::TempDir;
-
-    use crate::actions::package_manager;
 
     fn test_package_manager() -> PackageManager {
         package_manager::which().unwrap()

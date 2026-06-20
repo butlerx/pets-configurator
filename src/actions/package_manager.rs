@@ -139,3 +139,103 @@ pub fn which() -> Result<PackageManager, ParseError> {
     }
     Err(ParseError::NoSupportedPackageManager)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_display_for_each_package_manager_variant() {
+        let cases = [
+            (PackageManager::Apt, "apt"),
+            (PackageManager::Yum, "yum"),
+            (PackageManager::Apk, "apk"),
+            (PackageManager::Yay, "yay"),
+            (PackageManager::Pacman, "pacman"),
+            (PackageManager::Cargo, "cargo"),
+            (PackageManager::Homebrew, "homebrew"),
+        ];
+
+        for (manager, expected) in cases {
+            assert_eq!(manager.to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn test_from_str_valid_and_invalid_values() {
+        assert_eq!(
+            PackageManager::from_str("apt").unwrap(),
+            PackageManager::Apt
+        );
+        assert_eq!(
+            PackageManager::from_str("yum").unwrap(),
+            PackageManager::Yum
+        );
+        assert_eq!(
+            PackageManager::from_str("apk").unwrap(),
+            PackageManager::Apk
+        );
+        assert_eq!(
+            PackageManager::from_str("yay").unwrap(),
+            PackageManager::Yay
+        );
+        assert_eq!(
+            PackageManager::from_str("pacman").unwrap(),
+            PackageManager::Pacman
+        );
+        assert_eq!(
+            PackageManager::from_str("cargo").unwrap(),
+            PackageManager::Cargo
+        );
+        assert_eq!(
+            PackageManager::from_str("homebrew").unwrap(),
+            PackageManager::Homebrew
+        );
+        assert_eq!(
+            PackageManager::from_str("brew").unwrap(),
+            PackageManager::Homebrew
+        );
+        assert!(PackageManager::from_str("invalid").is_err());
+    }
+
+    #[test]
+    fn test_install_command_for_each_variant() {
+        assert_eq!(
+            PackageManager::Apt.install_command(),
+            vec!["apt-get", "-y", "install"]
+        );
+        assert_eq!(
+            PackageManager::Yum.install_command(),
+            vec!["yum", "-y", "install"]
+        );
+        assert_eq!(PackageManager::Apk.install_command(), vec!["apk", "add"]);
+        assert_eq!(
+            PackageManager::Pacman.install_command(),
+            vec!["pacman", "-S", "--noconfirm"]
+        );
+        assert_eq!(
+            PackageManager::Yay.install_command(),
+            vec!["yay", "-S", "--noconfirm"]
+        );
+        assert_eq!(
+            PackageManager::Cargo.install_command(),
+            vec!["cargo", "install"]
+        );
+        assert_eq!(
+            PackageManager::Homebrew.install_command(),
+            vec!["brew", "install"]
+        );
+    }
+
+    #[test]
+    fn test_requires_sudo() {
+        assert!(PackageManager::Apt.requires_sudo());
+        assert!(PackageManager::Yum.requires_sudo());
+        assert!(PackageManager::Pacman.requires_sudo());
+        assert!(!PackageManager::Apk.requires_sudo());
+        assert!(!PackageManager::Yay.requires_sudo());
+        assert!(!PackageManager::Cargo.requires_sudo());
+        assert!(!PackageManager::Homebrew.requires_sudo());
+    }
+}

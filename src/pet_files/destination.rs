@@ -313,6 +313,49 @@ mod tests {
     }
 
     #[test]
+    fn test_destination_needs_link_none_when_dest_exists_as_regular_file() {
+        let dir = tempdir().unwrap();
+        let dest_path = dir.path().join("dest_file");
+        let source_path = dir.path().join("source_file");
+        fs::write(&dest_path, b"already-here").unwrap();
+        fs::write(&source_path, b"source").unwrap();
+
+        let dest = Destination::new(dest_path.to_str().unwrap(), true, false);
+        assert_eq!(dest.needs_link(source_path.to_str().unwrap()), None);
+    }
+
+    #[test]
+    fn test_destination_needs_link_none_when_symlink_points_elsewhere() {
+        let dir = tempdir().unwrap();
+        let dest_path = dir.path().join("link_path");
+        let source_path = dir.path().join("source_file");
+        let wrong_target = dir.path().join("wrong_target");
+        fs::write(&source_path, b"source").unwrap();
+        fs::write(&wrong_target, b"wrong").unwrap();
+        std::os::unix::fs::symlink(&wrong_target, &dest_path).unwrap();
+
+        let dest = Destination::new(dest_path.to_str().unwrap(), true, false);
+        assert_eq!(dest.needs_link(source_path.to_str().unwrap()), None);
+    }
+
+    #[test]
+    fn test_destination_needs_link_none_when_not_symlink_destination() {
+        let dir = tempdir().unwrap();
+        let dest_path = dir.path().join("dest_path");
+        let source_path = dir.path().join("source_file");
+        fs::write(&source_path, b"source").unwrap();
+
+        let dest = Destination::new(dest_path.to_str().unwrap(), false, false);
+        assert_eq!(dest.needs_link(source_path.to_str().unwrap()), None);
+    }
+
+    #[test]
+    fn test_destination_needs_link_none_when_destination_is_empty() {
+        let dest = Destination::new("", true, false);
+        assert_eq!(dest.needs_link("/tmp/source"), None);
+    }
+
+    #[test]
     fn test_destination_needs_dir_creation() {
         let dir = tempdir().unwrap();
         let dest_path = dir.path().join("non_existing_dir/path");
@@ -333,6 +376,17 @@ mod tests {
         let dest = Destination::new(existing_dir.to_str().unwrap(), false, false);
 
         // needs_dir should return Cause::None because the directory already exists
+        assert_eq!(dest.needs_dir(), None);
+    }
+
+    #[test]
+    fn test_destination_needs_dir_none_when_directory_path_is_file() {
+        let dir = tempdir().unwrap();
+        let file_as_dir = dir.path().join("file_as_dir");
+        fs::write(&file_as_dir, b"not a directory").unwrap();
+        let dest_path = file_as_dir.join("child");
+
+        let dest = Destination::new(dest_path.to_str().unwrap(), false, false);
         assert_eq!(dest.needs_dir(), None);
     }
 
@@ -385,5 +439,45 @@ mod tests {
 
         // Destination exists and content is identical, so needs_copy should return Cause::None
         assert_eq!(dest.needs_copy(source_file.to_str().unwrap()), None);
+    }
+
+    #[test]
+    fn test_destination_needs_copy_none_when_symlink_destination() {
+        let dir = tempdir().unwrap();
+        let source_file = dir.path().join("source_file.txt");
+        let dest_file = dir.path().join("dest_file.txt");
+        fs::write(&source_file, b"content").unwrap();
+        fs::write(&dest_file, b"existing").unwrap();
+
+        let dest = Destination::new(dest_file.to_str().unwrap(), true, false);
+        assert_eq!(dest.needs_copy(source_file.to_str().unwrap()), None);
+    }
+
+    #[test]
+    fn test_destination_needs_copy_none_when_source_hash_fails() {
+        let dir = tempdir().unwrap();
+        let dest_file = dir.path().join("dest_file.txt");
+        fs::write(&dest_file, b"existing").unwrap();
+        let missing_source = dir.path().join("missing_source.txt");
+
+        let dest = Destination::new(dest_file.to_str().unwrap(), false, false);
+        assert_eq!(dest.needs_copy(missing_source.to_str().unwrap()), None);
+    }
+
+    #[test]
+    fn test_destination_display_and_from_and_getters() {
+        let dir = tempdir().unwrap();
+        let dest_path = dir.path().join("nested").join("file.txt");
+        let dest = Destination::new(dest_path.to_str().unwrap(), true, false);
+
+        assert_eq!(dest.to_string(), dest_path.to_string_lossy());
+        assert!(dest.is_symlink());
+        assert_eq!(
+            dest.directory(),
+            dir.path().join("nested").to_string_lossy()
+        );
+
+        let as_string: String = dest.clone().into();
+        assert_eq!(as_string, dest_path.to_string_lossy());
     }
 }
