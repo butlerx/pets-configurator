@@ -1,9 +1,8 @@
 use super::parser::ParseError;
 use crate::actions::{Action, Cause};
-use home_dir::HomeDirExt;
 use merkle_hash::{Algorithm, MerkleTree};
 use std::{
-    fmt, fs, io,
+    env, fmt, fs, io,
     path::{Path, PathBuf},
 };
 
@@ -13,6 +12,19 @@ fn sha256(path: &str) -> Result<Vec<u8>, ParseError> {
         .algorithm(Algorithm::Sha256)
         .build()?;
     Ok(tree.root.item.hash)
+}
+
+fn expand_tilde(path: &str) -> PathBuf {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Ok(home) = env::var("HOME") {
+            return PathBuf::from(home).join(rest);
+        }
+    } else if path == "~" {
+        if let Ok(home) = env::var("HOME") {
+            return PathBuf::from(home);
+        }
+    }
+    PathBuf::from(path)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,10 +53,7 @@ impl From<Destination> for String {
 
 impl Destination {
     pub fn new(dest: &str, is_symlink: bool, is_dir: bool) -> Self {
-        let dest_path = match dest.expand_home() {
-            Ok(path) => path,
-            _ => PathBuf::from(dest),
-        };
+        let dest_path = expand_tilde(dest);
         let directory = dest_path.parent().unwrap_or_else(|| Path::new(""));
         Self {
             dest: dest_path.to_string_lossy().to_string(),
@@ -479,5 +488,30 @@ mod tests {
 
         let as_string: String = dest.clone().into();
         assert_eq!(as_string, dest_path.to_string_lossy());
+    }
+
+    #[test]
+    fn test_expand_tilde_with_home() {
+        let home = env::var("HOME").unwrap();
+        let result = expand_tilde("~/.config/test");
+        assert_eq!(result, PathBuf::from(format!("{home}/.config/test")));
+    }
+
+    #[test]
+    fn test_expand_tilde_bare() {
+        let home = env::var("HOME").unwrap();
+        assert_eq!(expand_tilde("~"), PathBuf::from(&home));
+    }
+
+    #[test]
+    fn test_expand_tilde_no_tilde() {
+        assert_eq!(expand_tilde("/etc/foo"), PathBuf::from("/etc/foo"));
+    }
+
+    #[test]
+    fn test_expand_tilde_in_destination() {
+        let dest = Destination::new("~/.vimrc", false, false);
+        let home = env::var("HOME").unwrap();
+        assert_eq!(dest.dest, format!("{home}/.vimrc"));
     }
 }
