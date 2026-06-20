@@ -1,5 +1,5 @@
 use super::{condition::Condition, destination, mode, parser};
-use crate::actions::{package_manager::PackageManager, Action, ActionError, Cause, Package};
+use crate::actions::{Action, ActionError, Cause, Package, package_manager::PackageManager};
 use std::{
     fs,
     os::unix::fs::{MetadataExt, PermissionsExt},

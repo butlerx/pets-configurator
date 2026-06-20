@@ -1,4 +1,4 @@
-use super::{package_manager::PackageManager, ActionError};
+use super::{ActionError, package_manager::PackageManager};
 use std::{fmt, process::Command, str};
 
 // A Package represents a distribution package.

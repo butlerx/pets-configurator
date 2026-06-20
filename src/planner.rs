@@ -4,7 +4,7 @@
 // commands must succeed.
 
 use crate::{
-    actions::{self, package_manager::PackageManager, Package},
+    actions::{self, Package, package_manager::PackageManager},
     pet_files::PetsFile,
 };
 use std::{

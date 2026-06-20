@@ -59,15 +59,20 @@ sudo pets
 ## Usage
 
 ```
-pets [OPTIONS]
+pets [OPTIONS] [COMMAND]
 
 Options:
     --conf-dir <DIR>  Configuration directory [default: ~/pets, env: PETS_DIR]
     --check           Check for drift without applying changes (exit 1 if drift)
     --debug           Show debugging output
     --dry-run         Show changes with diffs without applying them
+    --no-backup       Disable backup creation before overwriting files
 -h, --help            Print help
 -V, --version         Print version
+
+Commands:
+    clean-backups     Remove all .pets-backup files from destination directories
+    completions       Generate shell completions (bash, zsh, fish, etc.)
 ```
 
 To use a different configuration directory:
@@ -89,6 +94,20 @@ Check for drift in CI or cron (exits non-zero if anything is out of sync):
 
 ```bash
 sudo pets --check
+```
+
+Clean up backup files:
+
+```bash
+sudo pets clean-backups
+```
+
+Generate shell completions:
+
+```bash
+pets completions bash > /etc/bash_completion.d/pets
+pets completions zsh > ~/.zfunc/_pets
+pets completions fish > ~/.config/fish/completions/pets.fish
 ```
 
 See [sample_pet](./sample_pet) for example configurations.
@@ -169,6 +188,9 @@ Supported conditions:
 When updating an existing file, pets automatically creates a backup at
 `<destfile>.pets-backup` before overwriting. This only happens on real runs, not
 during `--dry-run` or `--check`.
+
+Use `--no-backup` to disable this behaviour. Use `pets clean-backups` to remove
+all existing backup files.
 
 ## Examples
 

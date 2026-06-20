@@ -8,6 +8,11 @@ use std::{
     process::Command,
 };
 
+pub struct RunConfig {
+    pub dry_run: bool,
+    pub backup: bool,
+}
+
 /// The underlying filesystem or system operation to perform.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Operation {
@@ -165,10 +170,10 @@ impl Action {
         self
     }
 
-    pub fn perform(self, dry_run: bool) -> Result<i32, ActionError> {
+    pub fn perform(self, config: &RunConfig) -> Result<i32, ActionError> {
         log::info!("{}", self.operation);
 
-        if dry_run {
+        if config.dry_run {
             self.log_dry_run_details()?;
             return Ok(0);
         }
@@ -177,16 +182,16 @@ impl Action {
 
         match operation {
             Operation::Copy { source, dest } => {
-                if cause == Cause::Update && !source.is_dir() && dest.exists() {
-                    let backup_path = backup_path_for(&dest);
-                    fs::copy(&dest, &backup_path)?;
-                    log::info!("backed up {} to {}", dest.display(), backup_path.display());
+                if config.backup && cause == Cause::Update && !source.is_dir() && dest.exists() {
+                    let backup = backup_path_for(&dest);
+                    fs::copy(&dest, &backup)?;
+                    log::info!("backed up {} to {}", dest.display(), backup.display());
                 }
 
                 if source.is_dir() {
                     copy_dir_all(&source, &dest)?;
                 } else {
-                    fs::copy(&source, &dest)?;
+                    atomic_copy(&source, &dest)?;
                 }
                 Ok(0)
             }
@@ -350,6 +355,19 @@ fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
         } else {
             fs::copy(entry.path(), &dest_path)?;
         }
+    }
+    Ok(())
+}
+
+/// Copies `source` to `dest` atomically by writing to a temporary file in the
+/// same directory, then renaming. If the rename fails (e.g. cross-device), falls
+/// back to a direct copy.
+fn atomic_copy(source: &Path, dest: &Path) -> io::Result<()> {
+    let tmp_path = PathBuf::from(format!("{}.pets-tmp", dest.to_string_lossy()));
+    fs::copy(source, &tmp_path)?;
+    if fs::rename(&tmp_path, dest).is_err() {
+        let _ = fs::remove_file(&tmp_path);
+        fs::copy(source, dest)?;
     }
     Ok(())
 }

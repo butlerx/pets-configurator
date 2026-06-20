@@ -4,7 +4,7 @@ mod errors;
 mod package;
 pub mod package_manager;
 
-pub use action::Action;
+pub use action::{Action, RunConfig};
 pub use cause::Cause;
 pub use errors::ActionError;
 pub use package::Package;
