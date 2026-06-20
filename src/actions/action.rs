@@ -1,4 +1,5 @@
 use super::{ActionError, Cause};
+use similar::TextDiff;
 use std::{
     fmt, fs, io,
     os::unix::fs as unix_fs,
@@ -84,6 +85,10 @@ impl fmt::Display for Action {
 }
 
 impl Action {
+    pub fn cause(&self) -> Cause {
+        self.cause
+    }
+
     pub fn copy_file(cause: Cause, source: PathBuf, dest: PathBuf) -> Self {
         Self {
             cause,
@@ -162,7 +167,9 @@ impl Action {
 
     pub fn perform(self, dry_run: bool) -> Result<i32, ActionError> {
         log::info!("{}", self.operation);
+
         if dry_run {
+            self.log_dry_run_details()?;
             return Ok(0);
         }
 
@@ -170,6 +177,12 @@ impl Action {
 
         match operation {
             Operation::Copy { source, dest } => {
+                if cause == Cause::Update && !source.is_dir() && dest.exists() {
+                    let backup_path = backup_path_for(&dest);
+                    fs::copy(&dest, &backup_path)?;
+                    log::info!("backed up {} to {}", dest.display(), backup_path.display());
+                }
+
                 if source.is_dir() {
                     copy_dir_all(&source, &dest)?;
                 } else {
@@ -252,6 +265,55 @@ impl Action {
                 Ok(status)
             }
         }
+    }
+
+    fn log_dry_run_details(&self) -> Result<(), ActionError> {
+        match (&self.cause, &self.operation) {
+            (Cause::Create, Operation::Copy { source, .. }) => {
+                log::info!("new file: {}", source.display());
+            }
+            (Cause::Update, Operation::Copy { source, dest }) => {
+                log_unified_diff(source, dest)?;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+}
+
+fn backup_path_for(dest: &Path) -> PathBuf {
+    PathBuf::from(format!("{}.pets-backup", dest.to_string_lossy()))
+}
+
+fn log_unified_diff(source: &Path, dest: &Path) -> Result<(), ActionError> {
+    let source_content = read_text_file(source)?;
+    let dest_content = read_text_file(dest)?;
+
+    match (source_content, dest_content) {
+        (Some(source_text), Some(dest_text)) => {
+            let from = dest.display().to_string();
+            let to = source.display().to_string();
+            let diff = TextDiff::from_lines(&dest_text, &source_text)
+                .unified_diff()
+                .header(&from, &to)
+                .to_string();
+
+            for line in diff.lines() {
+                log::info!("{line}");
+            }
+        }
+        _ => log::info!("binary file differs"),
+    }
+
+    Ok(())
+}
+
+fn read_text_file(path: &Path) -> Result<Option<String>, ActionError> {
+    match fs::read_to_string(path) {
+        Ok(content) => Ok(Some(content)),
+        Err(err) if err.kind() == io::ErrorKind::InvalidData => Ok(None),
+        Err(err) => Err(err.into()),
     }
 }
 

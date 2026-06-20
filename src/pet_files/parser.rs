@@ -22,6 +22,8 @@ pub enum ParseError {
     MissingDestFile(String),
     #[error("Invalid file mode: {0}")]
     InvalidFileMode(String),
+    #[error("Invalid condition: {0}")]
+    InvalidCondition(String),
     #[error("Error hashing source file: {0}")]
     HashError(#[from] merkle_hash::error::IndexingError),
 }

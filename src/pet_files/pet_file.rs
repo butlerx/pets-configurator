@@ -1,4 +1,4 @@
-use super::{destination, mode, parser};
+use super::{condition::Condition, destination, mode, parser};
 use crate::actions::{package_manager::PackageManager, Action, ActionError, Cause, Package};
 use std::{
     fs,
@@ -17,6 +17,7 @@ pub struct PetsFile {
     mode: mode::Mode,
     pre: Option<Vec<String>>,
     post: Option<Vec<String>>,
+    conditions: Vec<Condition>,
 }
 
 impl PetsFile {
@@ -89,35 +90,9 @@ impl PetsFile {
             None => users::get_group_by_gid(users::get_current_gid()),
         };
 
-        let pre = modelines
-            .get("pre")
-            .map(|pre| {
-                let pre_args = pre[0]
-                    .split_whitespace()
-                    .map(std::string::ToString::to_string)
-                    .collect::<Vec<String>>();
-                if pre_args.is_empty() {
-                    None
-                } else {
-                    Some(pre_args)
-                }
-            })
-            .unwrap_or_default();
-
-        let post = modelines
-            .get("post")
-            .map(|post| {
-                let post_args = post[0]
-                    .split_whitespace()
-                    .map(std::string::ToString::to_string)
-                    .collect::<Vec<String>>();
-                if post_args.is_empty() {
-                    None
-                } else {
-                    Some(post_args)
-                }
-            })
-            .unwrap_or_default();
+        let pre = parse_command_directive(modelines.get("pre"));
+        let post = parse_command_directive(modelines.get("post"));
+        let conditions = parse_conditions(modelines.get("when"))?;
 
         log::debug!("'{}' pets syntax OK", path.display());
         Ok(Self {
@@ -129,6 +104,7 @@ impl PetsFile {
             mode,
             pre,
             post,
+            conditions,
         })
     }
 
@@ -142,6 +118,10 @@ impl PetsFile {
 
     pub fn packages(&self) -> &[Package] {
         &self.pkgs
+    }
+
+    pub fn matches_conditions(&self) -> bool {
+        self.conditions.iter().all(Condition::is_met)
     }
 
     /// validates assumptions that must hold for the individual configuration files.
@@ -361,6 +341,27 @@ impl PetsFile {
             Some(action)
         }
     }
+}
+
+fn parse_command_directive(directive: Option<&Vec<String>>) -> Option<Vec<String>> {
+    directive
+        .and_then(|values| values.first())
+        .map(|value| {
+            value
+                .split_whitespace()
+                .map(std::string::ToString::to_string)
+                .collect::<Vec<String>>()
+        })
+        .filter(|args| !args.is_empty())
+}
+
+fn parse_conditions(
+    conditions: Option<&Vec<String>>,
+) -> Result<Vec<Condition>, parser::ParseError> {
+    conditions
+        .map(|when| when.iter().map(|value| Condition::parse(value)).collect())
+        .transpose()
+        .map(Option::unwrap_or_default)
 }
 
 impl From<&PetsFile> for Vec<Action> {

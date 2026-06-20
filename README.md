@@ -62,9 +62,10 @@ sudo pets
 pets [OPTIONS]
 
 Options:
-    --conf-dir <DIR>  Configuration directory [default: ~/pets]
+    --conf-dir <DIR>  Configuration directory [default: ~/pets, env: PETS_DIR]
+    --check           Check for drift without applying changes (exit 1 if drift)
     --debug           Show debugging output
-    --dry-run         Only show changes without applying them
+    --dry-run         Show changes with diffs without applying them
 -h, --help            Print help
 -V, --version         Print version
 ```
@@ -73,6 +74,21 @@ To use a different configuration directory:
 
 ```bash
 pets --conf-dir /etc/pets
+# or
+export PETS_DIR=/etc/pets
+pets
+```
+
+Preview changes with diffs:
+
+```bash
+sudo pets --dry-run
+```
+
+Check for drift in CI or cron (exits non-zero if anything is out of sync):
+
+```bash
+sudo pets --check
 ```
 
 See [sample_pet](./sample_pet) for example configurations.
@@ -113,6 +129,7 @@ commas, or on multiple lines:
 | `package` | Package to install before deploying. Can be specified multiple times. Prefix with a package manager to override the default: `cargo:exa`, `yay:i3lock-color`. |
 | `pre` | Validation command. Must exit 0 for the file to be deployed. The source file path is appended as an argument. |
 | `post` | Command to run after the file is deployed (e.g. restart a service). |
+| `when` | Conditional directive. File is only applied when all conditions match. Supports `hostname:<name>` and `os:linux` / `os:macos`. Can be specified multiple times (AND logic). |
 
 ### Directory symlinks
 
@@ -124,6 +141,34 @@ directive:
 ```
 
 The parent directory of the `.petsfile` will be symlinked to the target.
+
+### Conditional deployment
+
+Use `when` directives to apply files only on specific hosts or operating
+systems. All conditions must match (AND logic). Files without `when` directives
+are always applied.
+
+```
+# pets: destfile=/etc/apt/sources.list.d/custom.list
+# pets: when=os:linux
+# pets: when=hostname:webserver
+
+deb http://example.com/repo stable main
+```
+
+Supported conditions:
+
+| Condition | Example | Matches when |
+| --- | --- | --- |
+| `hostname:<name>` | `when=hostname:myserver` | System hostname matches exactly |
+| `os:linux` | `when=os:linux` | Running on Linux |
+| `os:macos` | `when=os:macos` | Running on macOS (also accepts `os:darwin`) |
+
+### Backups
+
+When updating an existing file, pets automatically creates a backup at
+`<destfile>.pets-backup` before overwriting. This only happens on real runs, not
+during `--dry-run` or `--check`.
 
 ## Examples
 
@@ -174,16 +219,6 @@ domain (ip ip6) {
 }
 ```
 
-### Homebrew package on macOS
-
-```bash
-# pets: destfile=/usr/local/etc/my-tool.conf
-# pets: package=brew:my-tool
-# pets: post=/usr/bin/pkill -HUP my-tool
-
-setting=value
-```
-
 ### Multiple packages with mixed managers
 
 ```
@@ -193,4 +228,24 @@ setting=value
 
 [myapp]
 search_tool=rg
+```
+
+### Host-specific configuration
+
+```
+# pets: destfile=/etc/hostname, owner=root, group=root, mode=0644
+# pets: when=hostname:webserver
+
+webserver.example.com
+```
+
+### macOS-only Homebrew setup
+
+```bash
+# pets: destfile=/usr/local/etc/my-tool.conf
+# pets: when=os:macos
+# pets: package=brew:my-tool
+# pets: post=/usr/bin/pkill -HUP my-tool
+
+setting=value
 ```

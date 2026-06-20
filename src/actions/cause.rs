@@ -1,3 +1,4 @@
+use colored::Colorize;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,15 +17,15 @@ pub enum Cause {
 impl fmt::Display for Cause {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let pets_cause = match self {
-            Cause::Pkg => "PACKAGE_INSTALL",
-            Cause::Create => "FILE_CREATE",
-            Cause::Update => "FILE_UPDATE",
-            Cause::Link => "LINK_CREATE",
-            Cause::Dir => "DIR_CREATE",
-            Cause::Owner => "OWNER",
-            Cause::Mode => "CHMOD",
-            Cause::Post => "POST_UPDATE",
-            Cause::None => "NONE",
+            Cause::Pkg => "PACKAGE_INSTALL".cyan().to_string(),
+            Cause::Create => "FILE_CREATE".green().to_string(),
+            Cause::Update => "FILE_UPDATE".yellow().to_string(),
+            Cause::Link => "LINK_CREATE".green().to_string(),
+            Cause::Dir => "DIR_CREATE".green().to_string(),
+            Cause::Owner => "OWNER".normal().to_string(),
+            Cause::Mode => "CHMOD".normal().to_string(),
+            Cause::Post => "POST_UPDATE".blue().to_string(),
+            Cause::None => "NONE".normal().to_string(),
         };
 
         write!(f, "{pets_cause}")

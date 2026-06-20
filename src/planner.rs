@@ -53,6 +53,16 @@ pub fn plan_actions(files: Vec<PetsFile>) -> Vec<actions::Action> {
     // An error in one file means we're gonna skip it but proceed with the rest.
     let good_pets = files
         .into_iter()
+        .filter(|pf| {
+            let matches = pf.matches_conditions();
+            if !matches {
+                log::debug!(
+                    "skipping '{}' due to unmatched 'when' condition(s)",
+                    pf.source()
+                );
+            }
+            matches
+        })
         .filter(PetsFile::is_valid)
         .collect::<Vec<_>>();
 
