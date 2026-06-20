@@ -37,8 +37,6 @@ pub enum ParseError {
 // The line should something like:
 // # pets: destfile=/etc/ssh/sshd_config, owner=root, group=root, mode=0644
 // All modelines found are returned Key=Value pairs in a Vec.
-const MAX_MODELINES: usize = 50;
-
 const KNOWN_DIRECTIVES: &[&str] = &[
     "destfile", "symlink", "owner", "group", "mode", "package", "pre", "post", "when",
 ];
@@ -49,11 +47,7 @@ pub fn read_modelines<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Vec<Str
     let reader = io::BufReader::new(file);
 
     let mut result = HashMap::new();
-    for (lines_scanned, line) in reader.lines().enumerate() {
-        if lines_scanned >= MAX_MODELINES {
-            break;
-        }
-
+    for line in reader.lines() {
         let line = match line {
             Ok(line) if line.contains("pets:") => line,
             Ok(_) => continue,
@@ -188,20 +182,20 @@ mod tests {
     }
 
     #[test]
-    fn test_maxlines_limit() {
+    fn test_modelines_found_anywhere_in_file() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test_file");
         let mut file = File::create(&file_path).unwrap();
-        for i in 0..60 {
+        for i in 0..100 {
             writeln!(file, "line {i} without modelines").unwrap();
         }
-        writeln!(file, "# pets: destfile=/etc/should-be-ignored").unwrap();
+        writeln!(file, "# pets: destfile=/etc/deep-in-file").unwrap();
         let actual = read_modelines(file_path).unwrap();
-        assert!(actual.is_empty());
+        assert_eq!(actual.get("destfile").unwrap(), &vec!["/etc/deep-in-file"]);
     }
 
     #[test]
-    fn test_modelines_within_limit() {
+    fn test_modelines_at_top_with_content_below() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test_file");
         let mut file = File::create(&file_path).unwrap();

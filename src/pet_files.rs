@@ -8,7 +8,7 @@ mod pet_file;
 use crate::actions::package_manager;
 use directory_walker::DirectoryWalker;
 pub use parser::ParseError;
-pub use pet_file::PetsFile;
+pub use pet_file::{PetsFile, SyncStatus};
 
 pub fn load<P: AsRef<std::path::Path>>(directory: P) -> Result<Vec<PetsFile>, ParseError> {
     log::debug!(

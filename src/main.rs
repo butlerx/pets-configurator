@@ -23,6 +23,10 @@ struct Args {
     #[arg(long, default_value_t = false)]
     debug: bool,
 
+    /// Suppress informational output, only show errors and changes
+    #[arg(short, long, default_value_t = false)]
+    quiet: bool,
+
     /// Only show changes without applying them
     #[arg(long, default_value_t = false)]
     dry_run: bool,
@@ -48,6 +52,9 @@ enum SubCmd {
         /// Shell to generate completions for
         shell: Shell,
     },
+    /// Show managed files and their sync status
+    #[command(alias = "status")]
+    List,
 }
 
 fn default_conf_dir() -> String {
@@ -55,9 +62,11 @@ fn default_conf_dir() -> String {
     format!("{home_dir}/pets")
 }
 
-fn setup_logging(debug: bool) {
+fn setup_logging(debug: bool, quiet: bool) {
     let level = if debug {
         log::LevelFilter::Debug
+    } else if quiet {
+        log::LevelFilter::Warn
     } else {
         log::LevelFilter::Info
     };
@@ -66,7 +75,7 @@ fn setup_logging(debug: bool) {
 
 fn main() -> ExitCode {
     let args = Args::parse();
-    setup_logging(args.debug);
+    setup_logging(args.debug, args.quiet);
 
     match &args.command {
         Some(SubCmd::CleanBackups) => commands::clean_backups(&args.conf_dir),
@@ -74,6 +83,7 @@ fn main() -> ExitCode {
             generate(*shell, &mut Args::command(), "pets", &mut io::stdout());
             ExitCode::SUCCESS
         }
+        Some(SubCmd::List) => commands::list(&args.conf_dir),
         None if args.check => commands::check(&args.conf_dir),
         None => commands::apply(&args.conf_dir, args.dry_run, !args.no_backup),
     }

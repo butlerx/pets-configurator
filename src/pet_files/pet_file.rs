@@ -7,6 +7,14 @@ use std::{
     process::{Command, Stdio},
 };
 
+pub enum SyncStatus {
+    InSync,
+    Missing,
+    Modified,
+    LinkMissing,
+    LinkWrong,
+}
+
 pub struct PetsFile {
     // Absolute path to the configuration file
     source: String,
@@ -118,6 +126,30 @@ impl PetsFile {
 
     pub fn packages(&self) -> &[Package] {
         &self.pkgs
+    }
+
+    pub fn is_symlink_config(&self) -> bool {
+        self.dest.is_symlink()
+    }
+
+    pub fn sync_status(&self) -> SyncStatus {
+        if self.dest.is_symlink() {
+            match self.dest.needs_link(&self.source) {
+                None => SyncStatus::InSync,
+                Some(action) => match action.cause() {
+                    Cause::Link => SyncStatus::LinkMissing,
+                    _ => SyncStatus::LinkWrong,
+                },
+            }
+        } else {
+            match self.dest.needs_copy(&self.source) {
+                None => SyncStatus::InSync,
+                Some(action) => match action.cause() {
+                    Cause::Create => SyncStatus::Missing,
+                    _ => SyncStatus::Modified,
+                },
+            }
+        }
     }
 
     pub fn matches_conditions(&self) -> bool {
