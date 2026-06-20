@@ -7,9 +7,9 @@ size = 9.0
 
 [window]
 dynamic_padding = true
-opacity = 0.95
+opacity         = 0.95
 
 [keyboard]
 bindings = [
-    { key = "N", mods = "Control|Shift", action = "CreateNewWindow" },
+  { key = "N", mods = "Control|Shift", action = "CreateNewWindow" },
 ]
