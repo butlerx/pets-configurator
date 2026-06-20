@@ -1,120 +1,156 @@
 # PETS Configurator
 
-A Configuration Management System for computers that are Pets, not Cattle.
+[![Crates.io](https://img.shields.io/crates/v/pets-configurator)](https://crates.io/crates/pets-configurator)
+[![CI](https://github.com/butlerx/pets-configurator/actions/workflows/rust.yml/badge.svg)](https://github.com/butlerx/pets-configurator/actions/workflows/rust.yml)
+[![License: MIT](https://img.shields.io/crates/l/pets-configurator)](LICENSE)
 
-This package is a fork of the original
-[Pets package](https://github.com/ema/pets). You can understand
-[design decisions](https://github.com/ema/pets/tree/master?tab=readme-ov-file#design-overview)
-by referring to the original project.
+A configuration management system for computers that are Pets, not Cattle.
 
-This is for people who need to administer a handful of machines, all fairly
-different from each other and all Very Important. Those systems are not Cattle!
-They're actually a bit more than Pets. They're almost Family. For example: a
-laptop, workstation, and that personal tiny server in Sweden. They are all named
-after something dear.
+For people who administer a handful of machines — a laptop, a workstation, that
+personal server in Sweden — all fairly different and all Very Important. These
+systems are not Cattle. They're Pets. Almost Family.
 
-pets works on Linux and macOS systems. The following package managers are
-supported:
+This is a Rust rewrite of the original [Pets](https://github.com/ema/pets)
+project. See the original for
+[design decisions](https://github.com/ema/pets/tree/master?tab=readme-ov-file#design-overview).
 
-- Debian-like (apt)
-- RedHat-like (yum)
-- Alpine (apk)
-- Arch Linux (pacman, yay)
-- macOS (Homebrew)
-- Cargo (cross-platform)
+## How it works
 
-## Summary
+Pets is driven by comments embedded in config files, not a DSL. Drop config
+files into a directory (`~/pets` by default), annotate them with `# pets:`
+directives, and run `pets`. It will:
 
-Pets is driven by comments embedded in the config files themselves, rather than
-by a domain-specific language (DSL). For example, say you want to ensure that
-user `butlerx` has sudo rights. Create a file with the following contents under
-`$HOME/pets/`, run `pets` as root, done. The file can be called whatever you
-want. _Note_ that pets will install the `sudo` package for you if missing.
+1. **Install packages** listed in `package` directives
+2. **Validate** changes with the `pre` command (if specified)
+3. **Copy or symlink** files to their destination
+4. **Set ownership and permissions** (`owner`, `group`, `mode`)
+5. **Run post-update commands** like service reloads (`post`)
 
-```sudoers
-# pets: destfile=/etc/sudoers.d/ema, owner=root, group=root, mode=0440
-# pets: package=sudo
-# pets: pre=/usr/sbin/visudo -cf
-## ema ALL=(ALL:ALL) NOPASSWD:ALL
-```
+Files without `# pets:` directives are ignored. Directory structure is
+arbitrary.
 
-## Usage
-
-Build and install pets with:
+## Quick start
 
 ```bash
 cargo install pets-configurator
 ```
 
-The following options are supported:
+Create `~/pets/sudoers` with:
 
-```bash
-pets --help
-A configuration management system for Pets, not Cattle
-
-Usage: pets [OPTIONS]
-
-Options:
-      --conf-dir <CONF_DIR>  Pets configuration directory [default: /home/butlerx/pets]
-      --debug                Show debugging output
-      --dry-run              Only show changes without applying them
-  -h, --help                 Print help
-  -V, --version              Print version
+```sudoers
+# pets: destfile=/etc/sudoers.d/myuser, owner=root, group=root, mode=0440
+# pets: package=sudo
+# pets: pre=/usr/sbin/visudo -cf
+myuser ALL=(ALL:ALL) NOPASSWD:ALL
 ```
 
-Let's say you've decided to put your configuration files under `/etc/pets`. The
-system can then be used with:
+Preview what would happen:
+
+```bash
+sudo pets --dry-run
+```
+
+Apply:
+
+```bash
+sudo pets
+```
+
+## Usage
+
+```
+pets [OPTIONS]
+
+Options:
+    --conf-dir <DIR>  Configuration directory [default: ~/pets]
+    --debug           Show debugging output
+    --dry-run         Only show changes without applying them
+-h, --help            Print help
+-V, --version         Print version
+```
+
+To use a different configuration directory:
 
 ```bash
 pets --conf-dir /etc/pets
 ```
 
-See [sample_pet](./sample_pet) for a basic example of what your `/etc/pets` can
-look like. Note that directory structure is arbitrary, you can have as many
-directories as you want, call them what you want, and so on.
+See [sample_pet](./sample_pet) for example configurations.
+
+## Supported platforms
+
+| Platform | Package managers |
+| --- | --- |
+| Debian / Ubuntu | apt |
+| RHEL / Fedora | yum |
+| Alpine | apk |
+| Arch Linux | pacman, yay |
+| macOS | Homebrew |
+| Cross-platform | Cargo |
 
 ## Configuration directives
 
-- `destfile` -- where to install this file. One of either `destfile` or
-  `symlink` must be specified.
-- `symlink` -- create a symbolic link to this file, instead of copying it like
-  `destfile` would.
-- `owner` -- the file owner, passed to `chown`
-- `group` -- the group this file belongs to, passed to `chgrp`
-- `mode` -- octal mode for `chmod`
-- `package` -- which package to install before creating the file. This directive
-  can be specified more than once to install multiple packages. $The package
-  manager can be specified by prepending it the package with the name of the
-  package manager and a colon. Eg: `cargo:exa` would use cargo to install exa
-- `pre` -- validation command. This must succeed for the file to be
-  created/updated.
-- `post` -- apply command. Usually something like reloading a service.
-
-Configuration directives are passed as key/value arguments, either on multiple
-lines or separated by commas.
+Directives are embedded as comments in your config files using `# pets:` (or
+`; pets:` for ini-style files). They can be on a single line separated by
+commas, or on multiple lines:
 
 ```
-# pets: package=ssh, pre=/usr/sbin/sshd -t -f
-```
-
-The example above and the one below are equivalent
-
-```
+# pets: destfile=/etc/ssh/sshd_config, owner=root, group=root, mode=0644
 # pets: package=ssh
 # pets: pre=/usr/sbin/sshd -t -f
+# pets: post=/bin/systemctl reload ssh.service
 ```
+
+### Available directives
+
+| Directive | Description |
+| --- | --- |
+| `destfile` | Destination path to copy the file to. Required unless `symlink` is used. |
+| `symlink` | Create a symbolic link at this path instead of copying. |
+| `owner` | File owner (e.g. `root`). |
+| `group` | File group (e.g. `staff`). |
+| `mode` | Octal file permissions (e.g. `0644`). |
+| `package` | Package to install before deploying. Can be specified multiple times. Prefix with a package manager to override the default: `cargo:exa`, `yay:i3lock-color`. |
+| `pre` | Validation command. Must exit 0 for the file to be deployed. The source file path is appended as an argument. |
+| `post` | Command to run after the file is deployed (e.g. restart a service). |
+
+### Directory symlinks
+
+To symlink an entire directory, create a `.petsfile` inside it with a `symlink`
+directive:
+
+```
+# pets: symlink=~/.config/i3
+```
+
+The parent directory of the `.petsfile` will be symlinked to the target.
 
 ## Examples
 
-### Firewall
+### Vim configuration (symlink)
 
-Say you want to configure the local firewall to drop all incoming traffic except
-for ssh? Here's an example that does the following:
+```vim
+; pets: symlink=/root/.vimrc
 
-- Installs `ferm` if missing
-- Validates the configuration with `/usr/sbin/ferm -n`
-- If the configuration is valid, copies it under `/etc/ferm/ferm.conf`
-- Reloads the firewall rules with `systemctl reload`
+syntax on
+set expandtab
+set shiftwidth=4
+```
+
+### SSH server
+
+```sshd
+# pets: destfile=/etc/ssh/sshd_config, owner=root, group=root, mode=0644
+# pets: package=ssh
+# pets: pre=/usr/sbin/sshd -t -f
+# pets: post=/bin/systemctl reload ssh.service
+
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+UsePAM yes
+```
+
+### Firewall (ferm)
 
 ```
 # pets: destfile=/etc/ferm/ferm.conf, owner=root, group=root, mode=644
@@ -126,64 +162,35 @@ domain (ip ip6) {
     table filter {
         chain INPUT {
             policy DROP;
-
-            # connection tracking
             mod state state INVALID DROP;
             mod state state (ESTABLISHED RELATED) ACCEPT;
-
-            # allow local packets
             interface lo ACCEPT;
-
-            # respond to ping
             proto icmp ACCEPT;
-
-            # allow SSH connections
             proto tcp dport ssh ACCEPT;
         }
-
-        chain OUTPUT {
-            policy ACCEPT;
-        }
-
-        chain FORWARD {
-            policy DROP;
-        }
+        chain OUTPUT  { policy ACCEPT; }
+        chain FORWARD { policy DROP; }
     }
 }
 ```
 
-### SSH Server
+### Homebrew package on macOS
 
-```sshd
-# pets: destfile=/etc/ssh/sshd_config, owner=root, group=root, mode=0644
-# pets: package=ssh
-# pets: package=openssh-client-dbgsym
-# pets: pre=/usr/sbin/sshd -t -f
-# pets: post=/bin/systemctl reload ssh.service
-#
-# Warning! This file has been generated by pets(1). Any manual modification
-# will be lost.
+```bash
+# pets: destfile=/usr/local/etc/my-tool.conf
+# pets: package=brew:my-tool
+# pets: post=/usr/bin/pkill -HUP my-tool
 
-Port 22
-Protocol 2
-HostKey /etc/ssh/ssh_host_rsa_key
-HostKey /etc/ssh/ssh_host_dsa_key
-HostKey /etc/ssh/ssh_host_ecdsa_key
-HostKey /etc/ssh/ssh_host_ed25519_key
+setting=value
+```
 
-# Change to yes to enable challenge-response passwords (beware issues with
-# some PAM modules and threads)
-ChallengeResponseAuthentication no
+### Multiple packages with mixed managers
 
-# Change to no to disable tunnelled clear text passwords
-PasswordAuthentication no
+```
+# pets: destfile=/etc/myapp.conf
+# pets: package=curl
+# pets: package=cargo:ripgrep
 
-X11Forwarding yes
-
-# Allow client to pass locale environment variables
-AcceptEnv LANG LC_*
-
-Subsystem sftp /usr/lib/openssh/sftp-server
-
-UsePAM yes
+[myapp]
+search_tool=rg
 ```
