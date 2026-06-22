@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/butlerx/pets-configurator/compare/v0.5.0...v0.5.1) (2026-06-22)
+
+
+### Code Improvements
+
+* replace dynamic String errors with concrete error types ([5c0ca8c](https://github.com/butlerx/pets-configurator/commit/5c0ca8cd30a5389fd153e5db50a669e847835c8a))
+
 ## [0.5.0](https://github.com/butlerx/pets-configurator/compare/v0.4.0...v0.5.0) (2026-06-20)
 
 
