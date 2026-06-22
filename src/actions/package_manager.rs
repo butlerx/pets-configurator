@@ -32,7 +32,7 @@ impl fmt::Display for PackageManager {
 }
 
 impl str::FromStr for PackageManager {
-    type Err = String;
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -44,7 +44,7 @@ impl str::FromStr for PackageManager {
             "cargo" => Ok(PackageManager::Cargo),
             "homebrew" | "brew" => Ok(PackageManager::Homebrew),
             "pip" | "pip3" => Ok(PackageManager::Pip),
-            _ => Err("Invalid package manager".to_string()),
+            _ => Err(ParseError::InvalidPackageManager(s.to_string())),
         }
     }
 }
