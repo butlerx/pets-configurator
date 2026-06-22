@@ -22,6 +22,8 @@ pub enum ParseError {
     NotPetsFile,
     #[error("No package manager found on the system")]
     NoSupportedPackageManager,
+    #[error("invalid package manager: {0}")]
+    InvalidPackageManager(String),
     #[error("Neither 'destfile' nor 'symlink' directives found in '{0}'")]
     MissingDestFile(String),
     #[error("Invalid file mode: {0}")]

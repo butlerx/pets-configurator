@@ -1,4 +1,11 @@
 use std::{env, fs, io, io::Write, process};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum LockError {
+    #[error("another pets instance is running (lock file: {0})")]
+    AlreadyRunning(String),
+}
 
 #[derive(Debug)]
 pub struct Lock {
@@ -6,12 +13,12 @@ pub struct Lock {
 }
 
 impl Lock {
-    pub fn acquire() -> Result<Self, String> {
+    pub fn acquire() -> Result<Self, LockError> {
         let path = env::var("PETS_LOCK_FILE").unwrap_or_else(|_| "/tmp/pets.lock".to_string());
         Self::acquire_at(path)
     }
 
-    fn acquire_at(path: String) -> Result<Self, String> {
+    fn acquire_at(path: String) -> Result<Self, LockError> {
         match fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -21,9 +28,9 @@ impl Lock {
                 let _ = writeln!(f, "{}", process::id());
                 Ok(Self { path })
             }
-            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Err(format!(
-                "another pets instance is running (lock file: {path})"
-            )),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                Err(LockError::AlreadyRunning(path))
+            }
             Err(e) => {
                 log::warn!("could not create lock file {path}: {e}");
                 Ok(Self { path })
@@ -72,7 +79,7 @@ mod tests {
         let _lock = Lock::acquire_at(path.clone()).unwrap();
         let result = Lock::acquire_at(path);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("another pets instance"));
+        assert!(matches!(result.unwrap_err(), LockError::AlreadyRunning(_)));
     }
 
     #[test]
