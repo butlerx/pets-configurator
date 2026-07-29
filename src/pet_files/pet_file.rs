@@ -91,7 +91,7 @@ impl PetsFile {
                     Some(group)
                 } else {
                     // TODO: one day we may add support for creating groups
-                    log::warn!("unknown 'group' {}, skipping directive", &group[0]);
+                    log::warn!("unknown 'group' {}, skipping directive", group[0]);
                     uzers::get_group_by_gid(uzers::get_current_gid())
                 }
             }
