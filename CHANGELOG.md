@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/butlerx/pets-configurator/compare/v0.5.1...v0.5.2) (2026-08-03)
+
+
+### Bug Fixes
+
+* remove redundant borrow in log::warn macro ([04cec3e](https://github.com/butlerx/pets-configurator/commit/04cec3e6ab57f14e9fc5b40a461a95842c6c07a3))
+
 ## [0.5.1](https://github.com/butlerx/pets-configurator/compare/v0.5.0...v0.5.1) (2026-06-22)
 
 
