@@ -35,7 +35,7 @@ jobs:
       - run: cargo package --locked
       - name: Authenticate with crates.io
         id: crates_io_auth
-        uses: rust-lang/crates-io-auth-action@1a6a6213fc40463948b2c5791665943b6f911792 # v1.0.5
+        uses: rust-lang/crates-io-auth-action@275b31c2bd0ae2dc5fc5b03747ab8c88d6e3b1c6 # v1.0.5
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates_io_auth.outputs.token }}
