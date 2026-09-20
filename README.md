@@ -130,8 +130,9 @@ See [sample_pet](./sample_pet) for example configurations.
 ## Configuration directives
 
 Directives are embedded as comments in your config files using `# pets:` (or
-`; pets:` for ini-style files). They can be on a single line separated by
-commas, or on multiple lines:
+`; pets:` for ini-style files). A directive must start the line after optional
+whitespace. Multiple directives can share a comma-separated line or use separate
+lines:
 
 ```
 # pets: destfile=/etc/ssh/sshd_config, owner=root, group=root, mode=0644
@@ -139,6 +140,9 @@ commas, or on multiple lines:
 # pets: pre=/usr/sbin/sshd -t -f
 # pets: post=/bin/systemctl reload ssh.service
 ```
+
+A malformed directive reports its file and line number. That file is skipped
+while other valid configuration files continue to be processed.
 
 ### Available directives
 

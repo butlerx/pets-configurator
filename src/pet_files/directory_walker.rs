@@ -16,15 +16,14 @@ impl<P: AsRef<Path>> DirectoryWalker<P> {
         Self { directory }
     }
 
-    fn into_iter(self) -> impl Iterator<Item = Result<PathBuf, ParseError>> {
+    fn into_iter(self) -> impl Iterator<Item = PathBuf> {
         WalkDir::new(self.directory)
             .follow_links(true)
             .into_iter()
-            .filter_entry(|e| !is_git_dir(e))
-            .filter_map(std::result::Result::ok)
+            .filter_entry(|entry| !is_git_dir(entry))
+            .filter_map(Result::ok)
             .map(|entry| entry.path().to_owned())
             .filter(|path| path.is_file())
-            .map(Ok)
     }
 
     pub fn collect(self, package_manager: PackageManager) -> Result<Vec<PetsFile>, ParseError> {
@@ -34,7 +33,6 @@ impl<P: AsRef<Path>> DirectoryWalker<P> {
         );
 
         self.into_iter()
-            .filter_map(Result::ok)
             .filter_map(|path| process_pets_file(&path, package_manager).transpose())
             .collect()
     }
@@ -51,17 +49,24 @@ fn process_pets_file(
     path: &PathBuf,
     package_manager: PackageManager,
 ) -> Result<Option<PetsFile>, ParseError> {
-    match PetsFile::from_path(path, package_manager) {
-        Ok(pf) => Ok(Some(pf)),
-        Err(error) => match error {
+    PetsFile::from_path(path, package_manager)
+        .map(Some)
+        .or_else(|error| match error {
             ParseError::NotPetsFile => Ok(None),
-            ParseError::MissingDestFile(_) | ParseError::UnknownDirective(_) => {
-                log::error!("{error}");
+            ParseError::Directive { .. } => {
+                log::warn!("Skipping malformed pets file: {error}");
+                Ok(None)
+            }
+            ParseError::MissingDestFile(_)
+            | ParseError::InvalidKeyword(_)
+            | ParseError::UnknownDirective(_)
+            | ParseError::InvalidFileMode(_)
+            | ParseError::InvalidCondition(_) => {
+                log::warn!("Skipping '{}': {error}", path.display());
                 Ok(None)
             }
             _ => Err(error),
-        },
-    }
+        })
 }
 
 #[cfg(test)]
@@ -106,10 +111,13 @@ mod tests {
         ];
 
         // Write all files
-        for (path, content) in valid_pets.iter().chain(non_pets.iter()) {
-            let mut file = File::create(path).unwrap();
-            writeln!(file, "{content}").unwrap();
-        }
+        valid_pets
+            .iter()
+            .chain(non_pets.iter())
+            .try_for_each(|(path, content)| {
+                File::create(path).and_then(|mut file| writeln!(file, "{content}"))
+            })
+            .unwrap();
 
         let walker = DirectoryWalker::new(temp_dir.path());
         let pkg_manager = test_package_manager();
@@ -143,6 +151,27 @@ mod tests {
         let result = walker.collect(pkg_manager).unwrap();
 
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_directory_walker_skips_malformed_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let valid_path = temp_dir.path().join("valid.conf");
+        let malformed_path = temp_dir.path().join("malformed.conf");
+        let mut valid_file = File::create(valid_path).unwrap();
+        let mut malformed_file = File::create(malformed_path).unwrap();
+        writeln!(valid_file, "# pets: symlink=/tmp/pets-test-valid").unwrap();
+        writeln!(malformed_file, "# pets: invalid directive").unwrap();
+
+        let walker = DirectoryWalker::new(temp_dir.path());
+        let result = walker.collect(test_package_manager()).unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert!(
+            result
+                .first()
+                .is_some_and(|pets_file| pets_file.source().ends_with("valid.conf"))
+        );
     }
 
     #[test]

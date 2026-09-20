@@ -2,14 +2,19 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{self, prelude::*},
-    path::Path,
+    path::{Path, PathBuf},
 };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ParseError {
-    #[error("invalid pets modeline: {0}")]
-    InvalidModeline(String),
+    #[error("{path}:{line}: {source}")]
+    Directive {
+        path: PathBuf,
+        line: usize,
+        #[source]
+        source: Box<ParseError>,
+    },
     #[error("invalid keyword/argument: {0}")]
     InvalidKeyword(String),
     #[error(
@@ -34,48 +39,62 @@ pub enum ParseError {
     HashError(#[from] merkle_hash::error::IndexingError),
 }
 
-// looks into the given file and searches for pets modelines.
-// A modeline is any string which includes the 'pets:' substring.
-// The line should something like:
+impl ParseError {
+    fn at(self, path: &Path, line: usize) -> Self {
+        Self::Directive {
+            path: path.to_path_buf(),
+            line,
+            source: Box::new(self),
+        }
+    }
+}
+
+// Looks for pets modelines that begin a comment line after optional whitespace.
+// A modeline should look like:
 // # pets: destfile=/etc/ssh/sshd_config, owner=root, group=root, mode=0644
-// All modelines found are returned Key=Value pairs in a Vec.
+// All modelines found are returned as key-value pairs.
 const KNOWN_DIRECTIVES: &[&str] = &[
     "destfile", "symlink", "owner", "group", "mode", "package", "pre", "post", "when",
 ];
 
 pub fn read_modelines<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Vec<String>>, ParseError> {
-    log::debug!("Reading modelines from file '{}'", path.as_ref().display());
+    let path = path.as_ref();
+    log::debug!("Reading modelines from file '{}'", path.display());
     let file = File::open(path)?;
     let reader = io::BufReader::new(file);
 
-    let mut result = HashMap::new();
-    for line in reader.lines() {
-        let line = match line {
-            Ok(line) if line.contains("pets:") => line,
-            Ok(_) => continue,
-            Err(e) => match e.kind() {
-                io::ErrorKind::InvalidData => {
-                    log::debug!("Invalid UTF-8 data in file, skipping file");
-                    return Ok(result);
-                }
-                _ => return Err(e.into()),
-            },
-        };
-
-        let modeline = extract_modeline(line)?;
-        for r in parse_multiple_key_value(&modeline) {
-            match r {
-                Ok((k, v)) => {
-                    if !KNOWN_DIRECTIVES.contains(&k.as_str()) {
-                        return Err(ParseError::UnknownDirective(k));
-                    }
-                    result.entry(k).or_insert_with(Vec::new).push(v);
-                }
-                Err(e) => return Err(e),
+    reader
+        .lines()
+        .enumerate()
+        .map_while(|(line_index, line)| match line {
+            Ok(line) => Some(Ok((line_index + 1, line))),
+            Err(error) if error.kind() == io::ErrorKind::InvalidData => {
+                log::debug!("Invalid UTF-8 data in file, skipping file");
+                None
             }
-        }
-    }
-    Ok(result)
+            Err(error) => Some(Err(ParseError::from(error))),
+        })
+        .try_fold(HashMap::<String, Vec<String>>::new(), |directives, line| {
+            let (line_number, line) = line?;
+            let Some(modeline) = extract_modeline(&line) else {
+                return Ok(directives);
+            };
+
+            parse_multiple_key_value(modeline).try_fold(directives, |mut directives, parsed| {
+                let (key, value) = parsed
+                    .and_then(validate_directive)
+                    .map_err(|error| error.at(path, line_number))?;
+                directives.entry(key).or_default().push(value);
+                Ok(directives)
+            })
+        })
+}
+
+fn validate_directive((key, value): (String, String)) -> Result<(String, String), ParseError> {
+    KNOWN_DIRECTIVES
+        .contains(&key.as_str())
+        .then_some((key.clone(), value))
+        .ok_or(ParseError::UnknownDirective(key))
 }
 
 fn parse_multiple_key_value(
@@ -88,10 +107,10 @@ fn parse_multiple_key_value(
         .map(parse_key_value)
 }
 
-fn extract_modeline(line: String) -> Result<String, ParseError> {
-    line.split_once("pets:")
-        .map(|(_, content)| content.to_string())
-        .ok_or(ParseError::InvalidModeline(line))
+fn extract_modeline(line: &str) -> Option<&str> {
+    let line = line.trim_start();
+    let comment = line.strip_prefix('#').or_else(|| line.strip_prefix(';'))?;
+    comment.trim_start().strip_prefix("pets:")
 }
 
 fn parse_key_value(pair: &str) -> Result<(String, String), ParseError> {
@@ -116,10 +135,20 @@ mod tests {
 
     #[test]
     fn test_extract_modeline() {
-        assert_eq!(
-            extract_modeline("# pets: key=value".to_string()).unwrap(),
-            " key=value".to_string()
-        );
+        assert_eq!(extract_modeline("# pets: key=value"), Some(" key=value"));
+        assert_eq!(extract_modeline("  ;pets: key=value"), Some(" key=value"));
+        assert_eq!(extract_modeline("text # pets: key=value"), None);
+    }
+
+    #[test]
+    fn test_inline_modeline_marker_is_ignored() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("README.md");
+        let mut file = File::create(&file_path).unwrap();
+        writeln!(file, "Annotate your files with `# pets:` directives.").unwrap();
+
+        let actual = read_modelines(file_path).unwrap();
+        assert!(actual.is_empty());
     }
 
     #[test]
@@ -163,14 +192,21 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_modeline() {
+    fn test_malformed_directive_reports_file_and_line() {
         let temp_dir = TempDir::new().unwrap();
-        let path = temp_dir.path();
-        let file_path = path.join("test_file");
+        let file_path = temp_dir.path().join("test_file");
         let mut file = File::create(&file_path).unwrap();
-        writeln!(file, "pets: destfile=/etc/foo, invalid modeline").unwrap();
-        let actual = read_modelines(file_path).unwrap_err();
-        assert!(matches!(actual, ParseError::InvalidKeyword(_)));
+        writeln!(file, "ordinary content").unwrap();
+        writeln!(file, "# pets: invalid directive").unwrap();
+
+        let error = read_modelines(&file_path).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "{}:2: invalid keyword/argument: invalid directive",
+                file_path.display()
+            )
+        );
     }
 
     #[test]
@@ -180,7 +216,11 @@ mod tests {
         let mut file = File::create(&file_path).unwrap();
         writeln!(file, "# pets: destfile=/etc/foo, pacakge=vim").unwrap();
         let actual = read_modelines(file_path).unwrap_err();
-        assert!(matches!(actual, ParseError::UnknownDirective(_)));
+        assert!(matches!(
+            actual,
+            ParseError::Directive { source, .. }
+                if matches!(*source, ParseError::UnknownDirective(_))
+        ));
     }
 
     #[test]
@@ -188,9 +228,9 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test_file");
         let mut file = File::create(&file_path).unwrap();
-        for i in 0..100 {
-            writeln!(file, "line {i} without modelines").unwrap();
-        }
+        (0..100)
+            .try_for_each(|i| writeln!(file, "line {i} without modelines"))
+            .unwrap();
         writeln!(file, "# pets: destfile=/etc/deep-in-file").unwrap();
         let actual = read_modelines(file_path).unwrap();
         assert_eq!(actual.get("destfile").unwrap(), &vec!["/etc/deep-in-file"]);
@@ -202,9 +242,9 @@ mod tests {
         let file_path = temp_dir.path().join("test_file");
         let mut file = File::create(&file_path).unwrap();
         writeln!(file, "# pets: destfile=/etc/foo").unwrap();
-        for i in 0..20 {
-            writeln!(file, "line {i} of content").unwrap();
-        }
+        (0..20)
+            .try_for_each(|i| writeln!(file, "line {i} of content"))
+            .unwrap();
         let actual = read_modelines(file_path).unwrap();
         assert_eq!(actual.get("destfile").unwrap(), &vec!["/etc/foo"]);
     }
