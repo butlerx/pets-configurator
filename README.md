@@ -118,14 +118,14 @@ See [sample_pet](./sample_pet) for example configurations.
 
 ## Supported platforms
 
-| Platform | Package managers |
-| --- | --- |
-| Debian / Ubuntu | apt |
-| RHEL / Fedora | yum |
-| Alpine | apk |
-| Arch Linux | pacman, yay |
-| macOS | Homebrew |
-| Cross-platform | Cargo, pip, npm |
+| Platform        | Package managers |
+| --------------- | ---------------- |
+| Debian / Ubuntu | apt              |
+| RHEL / Fedora   | yum              |
+| Alpine          | apk              |
+| Arch Linux      | pacman, yay      |
+| macOS           | Homebrew         |
+| Cross-platform  | Cargo, pip, npm  |
 
 ## Configuration directives
 
@@ -142,17 +142,17 @@ commas, or on multiple lines:
 
 ### Available directives
 
-| Directive | Description |
-| --- | --- |
-| `destfile` | Destination path to copy the file to. Required unless `symlink` is used. |
-| `symlink` | Create a symbolic link at this path instead of copying. |
-| `owner` | File owner (e.g. `root`). |
-| `group` | File group (e.g. `staff`). |
-| `mode` | Octal file permissions (e.g. `0644`). |
-| `package` | Package to install before deploying. Can be specified multiple times. Prefix with a package manager to override the default: `cargo:exa`, `yay:i3lock-color`, `npm:prettier`. npm packages are installed globally and may use scoped names or exact versions. |
-| `pre` | Validation command. Must exit 0 for the file to be deployed. The source file path is appended as an argument. |
-| `post` | Command to run after the file is deployed (e.g. restart a service). |
-| `when` | Conditional directive. File is only applied when all conditions match. Supports `hostname:<name>` and `os:linux` / `os:macos`. Can be specified multiple times (AND logic). |
+| Directive  | Description                                                                                                                                                                                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `destfile` | Destination path to copy the file to. Required unless `symlink` is used.                                                                                                                                                                                      |
+| `symlink`  | Create a symbolic link at this path instead of copying.                                                                                                                                                                                                       |
+| `owner`    | File owner (e.g. `root`).                                                                                                                                                                                                                                     |
+| `group`    | File group (e.g. `staff`).                                                                                                                                                                                                                                    |
+| `mode`     | Octal file permissions (e.g. `0644`).                                                                                                                                                                                                                         |
+| `package`  | Package to install before deploying. Can be specified multiple times. Prefix with a package manager to override the default: `cargo:exa`, `yay:i3lock-color`, `npm:prettier`. npm packages are installed globally and may use scoped names or exact versions. |
+| `pre`      | Validation command. Must exit 0 for the file to be deployed. The source file path is appended as an argument.                                                                                                                                                 |
+| `post`     | Command to run after the file is deployed (e.g. restart a service).                                                                                                                                                                                           |
+| `when`     | Conditional directive. File is only applied when all conditions match. Supports `hostname:<name>` and `os:linux` / `os:macos`. Can be specified multiple times (AND logic).                                                                                   |
 
 ### Directory symlinks
 
@@ -181,11 +181,11 @@ deb http://example.com/repo stable main
 
 Supported conditions:
 
-| Condition | Example | Matches when |
-| --- | --- | --- |
-| `hostname:<name>` | `when=hostname:myserver` | System hostname matches exactly |
-| `os:linux` | `when=os:linux` | Running on Linux |
-| `os:macos` | `when=os:macos` | Running on macOS (also accepts `os:darwin`) |
+| Condition         | Example                  | Matches when                                |
+| ----------------- | ------------------------ | ------------------------------------------- |
+| `hostname:<name>` | `when=hostname:myserver` | System hostname matches exactly             |
+| `os:linux`        | `when=os:linux`          | Running on Linux                            |
+| `os:macos`        | `when=os:macos`          | Running on macOS (also accepts `os:darwin`) |
 
 ### Backups
 
@@ -199,8 +199,8 @@ all existing backup files.
 ## Examples
 
 The most common use case is managing dotfiles across machines. Store your config
-files in a git repo, add `# pets:` directives, and run `pets` to symlink or
-copy them into place.
+files in a git repo, add `# pets:` directives, and run `pets` to symlink or copy
+them into place.
 
 See [sample_pet](./sample_pet) for a complete example.
 
@@ -300,7 +300,7 @@ services:
   web:
     image: nginx:alpine
     ports:
-      - "80:80"
+      - '80:80'
   cache:
     image: redis:alpine
 ```
@@ -342,7 +342,7 @@ Persistent=true
 ### Prerequisites
 
 - [Rust](https://rustup.rs/) 1.85+
-- [pre-commit](https://pre-commit.com/)
+- [prek](https://prek.j178.dev/)
 
 ### Setup
 
@@ -355,8 +355,8 @@ cargo build
 
 ### Running checks
 
-Pre-commit handles formatting, linting, and commit message validation
-automatically. To run all hooks manually:
+Prek handles formatting, linting, and commit message validation automatically.
+To run all hooks manually:
 
 ```bash
 pre-commit run --all-files
@@ -370,6 +370,5 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-Commits must follow
-[Conventional Commits](https://www.conventionalcommits.org/) format (enforced by
-pre-commit).
+Commits must follow [Conventional Commits](https://www.conventionalcommits.org/)
+format (enforced by pre-commit).
