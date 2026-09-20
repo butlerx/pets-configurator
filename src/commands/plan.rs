@@ -54,6 +54,40 @@ mod tests {
     }
 
     #[test]
+    fn load_and_plan_ignores_unmatched_duplicate_destinations() {
+        let dir = tempdir().unwrap();
+        let destination = dir.path().join("shared.conf");
+        let current_os = if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "linux"
+        };
+        let unmatched_os = if cfg!(target_os = "macos") {
+            "linux"
+        } else {
+            "macos"
+        };
+        fs::write(
+            dir.path().join("matching.conf"),
+            format!(
+                "# pets: destfile={}\n# pets: when=os:{current_os}\n",
+                destination.display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("ignored.conf"),
+            format!(
+                "# pets: destfile={}\n# pets: when=os:{unmatched_os}\n",
+                destination.display()
+            ),
+        )
+        .unwrap();
+
+        assert!(load_and_plan(dir.path().to_str().unwrap()).is_ok());
+    }
+
+    #[test]
     fn load_and_plan_with_manifest_resource() {
         let dir = tempdir().unwrap();
         fs::write(

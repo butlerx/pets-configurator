@@ -87,3 +87,54 @@ fn print_resource_status(resource: &ResourceStatus) -> bool {
     println!("{symbol} {} ({}, {state})", resource.name, resource.kind);
     resource.in_sync
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn is_success(code: ExitCode) -> bool {
+        format!("{code:?}") == format!("{:?}", ExitCode::SUCCESS)
+    }
+
+    #[test]
+    fn ignores_files_with_unmatched_conditions() {
+        let directory = tempdir().unwrap();
+        let condition = if cfg!(target_os = "macos") {
+            "linux"
+        } else {
+            "macos"
+        };
+        fs::write(
+            directory.path().join("ignored.conf"),
+            format!(
+                "# pets: destfile={}\n# pets: when=os:{condition}\n",
+                directory.path().join("missing.conf").display()
+            ),
+        )
+        .unwrap();
+
+        assert!(is_success(list(directory.path().to_str().unwrap())));
+    }
+
+    #[test]
+    fn reports_drift_for_files_with_matching_conditions() {
+        let directory = tempdir().unwrap();
+        let condition = if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "linux"
+        };
+        fs::write(
+            directory.path().join("managed.conf"),
+            format!(
+                "# pets: destfile={}\n# pets: when=os:{condition}\n",
+                directory.path().join("missing.conf").display()
+            ),
+        )
+        .unwrap();
+
+        assert!(!is_success(list(directory.path().to_str().unwrap())));
+    }
+}

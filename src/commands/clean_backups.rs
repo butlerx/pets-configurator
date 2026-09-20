@@ -115,6 +115,31 @@ mod tests {
     }
 
     #[test]
+    fn clean_backups_ignores_files_with_unmatched_conditions() {
+        let dir = tempdir().unwrap();
+        let dest = dir.path().join("dest.txt");
+        let backup = PathBuf::from(format!("{}.pets-backup", dest.display()));
+        let unmatched_os = if cfg!(target_os = "macos") {
+            "linux"
+        } else {
+            "macos"
+        };
+        fs::write(
+            dir.path().join("ignored.conf"),
+            format!(
+                "# pets: destfile={}\n# pets: when=os:{unmatched_os}\n",
+                dest.display()
+            ),
+        )
+        .unwrap();
+        fs::write(&backup, b"keep me").unwrap();
+
+        let code = clean_backups(dir.path().to_str().unwrap());
+        assert!(is_success(code));
+        assert!(backup.exists());
+    }
+
+    #[test]
     fn clean_backups_removes_generated_resource_backups() {
         let dir = tempdir().unwrap();
         let target = dir.path().join("completions/_pets");
