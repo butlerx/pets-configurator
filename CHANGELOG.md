@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/butlerx/pets-configurator/compare/v0.6.0...v0.6.1) (2026-09-20)
+
+
+### Bug Fixes
+
+* accept common comment markers in modelines ([cee0b17](https://github.com/butlerx/pets-configurator/commit/cee0b177ba38952cb882ed807148dab8e77a69c6))
+
 ## [0.6.0](https://github.com/butlerx/pets-configurator/compare/v0.5.1...v0.6.0) (2026-09-20)
 
 
