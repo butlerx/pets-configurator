@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/butlerx/pets-configurator/compare/v0.7.0...v0.7.1) (2026-09-20)
+
+
+### Bug Fixes
+
+* detect homebrew casks as installed ([1fd02b2](https://github.com/butlerx/pets-configurator/commit/1fd02b2c96b8ebc7020a9ed8278ad1cfca2abc1e))
+
 ## [0.7.0](https://github.com/butlerx/pets-configurator/compare/v0.6.1...v0.7.0) (2026-09-20)
 
 
