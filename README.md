@@ -129,10 +129,21 @@ See [sample_pet](./sample_pet) for example configurations.
 
 ## Configuration directives
 
-Directives are embedded as comments in your config files using `# pets:` (or
-`; pets:` for ini-style files). A directive must start the line after optional
-whitespace. Multiple directives can share a comma-separated line or use separate
-lines:
+Directives are embedded as comments in your config files using `# pets:`. The
+comment marker can be any of `#`, `;`, `//`, `--`, `"`, `!` or `%`, so the
+modeline can be written in whatever comment syntax the file already uses:
+
+```
+# pets: symlink=~/.gitconfig
+; pets: symlink=~/.config/polybar/config.ini
+// pets: symlink=~/.prettierrc.js
+" pets: symlink=~/.vimrc
+! pets: symlink=~/.Xmodmap
+```
+
+A directive must start the line after optional whitespace, so a `pets:` mention
+inside prose or code is ignored. Multiple directives can share a comma-separated
+line or use separate lines:
 
 ```
 # pets: destfile=/etc/ssh/sshd_config, owner=root, group=root, mode=0644

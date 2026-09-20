@@ -107,9 +107,17 @@ fn parse_multiple_key_value(
         .map(parse_key_value)
 }
 
+// Comment markers understood at the start of a modeline. Covers shell and ini
+// (`#`, `;`), C-like (`//`), SQL and Lua (`--`), vim script (`"`), X11 (`!`)
+// and TeX (`%`) style comments. The marker must open the line, so a `pets:`
+// mention inside prose or code is still ignored.
+const COMMENT_MARKERS: &[&str] = &["//", "--", "#", ";", "\"", "!", "%"];
+
 fn extract_modeline(line: &str) -> Option<&str> {
     let line = line.trim_start();
-    let comment = line.strip_prefix('#').or_else(|| line.strip_prefix(';'))?;
+    let comment = COMMENT_MARKERS
+        .iter()
+        .find_map(|marker| line.strip_prefix(marker))?;
     comment.trim_start().strip_prefix("pets:")
 }
 
@@ -138,6 +146,38 @@ mod tests {
         assert_eq!(extract_modeline("# pets: key=value"), Some(" key=value"));
         assert_eq!(extract_modeline("  ;pets: key=value"), Some(" key=value"));
         assert_eq!(extract_modeline("text # pets: key=value"), None);
+    }
+
+    #[test]
+    fn test_extract_modeline_comment_markers() {
+        assert!(
+            [
+                "// pets: key=value",
+                "-- pets: key=value",
+                "# pets: key=value",
+                "; pets: key=value",
+                "\" pets: key=value",
+                "! pets: key=value",
+                "% pets: key=value",
+                "   // pets: key=value",
+            ]
+            .into_iter()
+            .all(|line| extract_modeline(line) == Some(" key=value"))
+        );
+    }
+
+    #[test]
+    fn test_extract_modeline_rejects_inline_markers() {
+        assert!(
+            [
+                "let x = 1; // pets: key=value",
+                "code() // pets: key=value",
+                "text -- pets: key=value",
+                "pets: key=value",
+            ]
+            .into_iter()
+            .all(|line| extract_modeline(line).is_none())
+        );
     }
 
     #[test]
