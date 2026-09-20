@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.0](https://github.com/butlerx/pets-configurator/compare/v0.5.1...v0.6.0) (2026-09-20)
+
+
+### Features
+
+* add npm package manager support ([b1cedd6](https://github.com/butlerx/pets-configurator/commit/b1cedd6c2dc4c93718ff8ca966d9fa2726de0373))
+
+
+### Bug Fixes
+
+* isolate malformed configuration files ([1ee5b7d](https://github.com/butlerx/pets-configurator/commit/1ee5b7d6eb193f5226ca6b5849e5d493a8036737)), closes [#33](https://github.com/butlerx/pets-configurator/issues/33)
+* remove redundant borrow in log::warn macro ([04cec3e](https://github.com/butlerx/pets-configurator/commit/04cec3e6ab57f14e9fc5b40a461a95842c6c07a3))
+
+
+### Documentation
+
+* refresh development instructions ([d69ae30](https://github.com/butlerx/pets-configurator/commit/d69ae30437a571c482cee678779e095ede62e24f))
+
 ## [0.5.1](https://github.com/butlerx/pets-configurator/compare/v0.5.0...v0.5.1) (2026-06-22)
 
 
