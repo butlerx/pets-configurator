@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/butlerx/pets-configurator/compare/v0.6.1...v0.7.0) (2026-09-20)
+
+
+### Features
+
+* add repository-native setup resources ([1de5f7f](https://github.com/butlerx/pets-configurator/commit/1de5f7fca7eb0316d609aa7b62354f26e6ec69b6))
+
 ## [0.6.1](https://github.com/butlerx/pets-configurator/compare/v0.6.0...v0.6.1) (2026-09-20)
 
 
