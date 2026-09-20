@@ -125,7 +125,7 @@ See [sample_pet](./sample_pet) for example configurations.
 | Alpine | apk |
 | Arch Linux | pacman, yay |
 | macOS | Homebrew |
-| Cross-platform | Cargo |
+| Cross-platform | Cargo, pip, npm |
 
 ## Configuration directives
 
@@ -149,7 +149,7 @@ commas, or on multiple lines:
 | `owner` | File owner (e.g. `root`). |
 | `group` | File group (e.g. `staff`). |
 | `mode` | Octal file permissions (e.g. `0644`). |
-| `package` | Package to install before deploying. Can be specified multiple times. Prefix with a package manager to override the default: `cargo:exa`, `yay:i3lock-color`. |
+| `package` | Package to install before deploying. Can be specified multiple times. Prefix with a package manager to override the default: `cargo:exa`, `yay:i3lock-color`, `npm:prettier`. npm packages are installed globally and may use scoped names or exact versions. |
 | `pre` | Validation command. Must exit 0 for the file to be deployed. The source file path is appended as an argument. |
 | `post` | Command to run after the file is deployed (e.g. restart a service). |
 | `when` | Conditional directive. File is only applied when all conditions match. Supports `hostname:<name>` and `os:linux` / `os:macos`. Can be specified multiple times (AND logic). |
@@ -209,6 +209,8 @@ See [sample_pet](./sample_pet) for a complete example.
 ```zsh
 # pets: package=zsh
 # pets: package=cargo:exa
+# pets: package=npm:@biomejs/biome
+# pets: package=npm:typescript@5.8.3
 # pets: package=bat
 # pets: symlink=~/.zshrc
 

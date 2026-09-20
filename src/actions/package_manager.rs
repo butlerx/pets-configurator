@@ -13,6 +13,7 @@ pub enum PackageManager {
     Cargo,
     Homebrew,
     Pip,
+    Npm,
 }
 
 impl fmt::Display for PackageManager {
@@ -26,6 +27,7 @@ impl fmt::Display for PackageManager {
             PackageManager::Cargo => "cargo",
             PackageManager::Homebrew => "homebrew",
             PackageManager::Pip => "pip",
+            PackageManager::Npm => "npm",
         };
         write!(f, "{pkg_manager}")
     }
@@ -44,6 +46,7 @@ impl str::FromStr for PackageManager {
             "cargo" => Ok(PackageManager::Cargo),
             "homebrew" | "brew" => Ok(PackageManager::Homebrew),
             "pip" | "pip3" => Ok(PackageManager::Pip),
+            "npm" => Ok(PackageManager::Npm),
             _ => Err(ParseError::InvalidPackageManager(s.to_string())),
         }
     }
@@ -73,6 +76,11 @@ impl PackageManager {
             PackageManager::Cargo => vec!["cargo".to_string(), "install".to_string()],
             PackageManager::Homebrew => vec!["brew".to_string(), "install".to_string()],
             PackageManager::Pip => vec![pip_binary().to_string(), "install".to_string()],
+            PackageManager::Npm => vec![
+                "npm".to_string(),
+                "install".to_string(),
+                "--global".to_string(),
+            ],
         }
     }
 
@@ -172,6 +180,7 @@ mod tests {
             (PackageManager::Cargo, "cargo"),
             (PackageManager::Homebrew, "homebrew"),
             (PackageManager::Pip, "pip"),
+            (PackageManager::Npm, "npm"),
         ];
 
         for (manager, expected) in cases {
@@ -221,6 +230,10 @@ mod tests {
             PackageManager::from_str("pip3").unwrap(),
             PackageManager::Pip
         );
+        assert_eq!(
+            PackageManager::from_str("npm").unwrap(),
+            PackageManager::Npm
+        );
         assert!(PackageManager::from_str("invalid").is_err());
     }
 
@@ -254,6 +267,10 @@ mod tests {
         let pip_cmd = PackageManager::Pip.install_command();
         assert!(pip_cmd[0] == "pip3" || pip_cmd[0] == "pip");
         assert_eq!(pip_cmd[1], "install");
+        assert_eq!(
+            PackageManager::Npm.install_command(),
+            vec!["npm", "install", "--global"]
+        );
     }
 
     #[test]
@@ -266,5 +283,6 @@ mod tests {
         assert!(!PackageManager::Cargo.requires_sudo());
         assert!(!PackageManager::Homebrew.requires_sudo());
         assert!(!PackageManager::Pip.requires_sudo());
+        assert!(!PackageManager::Npm.requires_sudo());
     }
 }

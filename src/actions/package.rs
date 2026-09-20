@@ -58,6 +58,7 @@ impl Package {
                 let cmd = package_manager::pip_binary();
                 (cmd, vec!["show", &self.name])
             }
+            PackageManager::Npm => ("npm", vec!["view", &self.name, "name"]),
         };
 
         let stdout = match Command::new(cmd_config.0).args(cmd_config.1).output() {
@@ -104,7 +105,7 @@ impl Package {
                 }
                 _ => Err(self.not_found()),
             },
-            PackageManager::Pip if !stdout.is_empty() => {
+            PackageManager::Pip | PackageManager::Npm if !stdout.trim().is_empty() => {
                 log::debug!("{} is a valid package name", self.name);
                 Ok(())
             }
@@ -114,7 +115,8 @@ impl Package {
             | PackageManager::Yay
             | PackageManager::Cargo
             | PackageManager::Homebrew
-            | PackageManager::Pip => Err(self.not_found()),
+            | PackageManager::Pip
+            | PackageManager::Npm => Err(self.not_found()),
         }
     }
 
@@ -199,6 +201,13 @@ impl Package {
                 Ok(output) => Ok(output.status.success()),
                 Err(_) => Err(ActionError::NoPackageManager),
             },
+            PackageManager::Npm => match Command::new("npm")
+                .args(["list", "--global", "--depth=0", &self.name])
+                .output()
+            {
+                Ok(output) => Ok(output.status.success()),
+                Err(_) => Err(ActionError::NoPackageManager),
+            },
         }
     }
 }
@@ -221,6 +230,17 @@ mod tests {
         let family = package_manager::which().unwrap();
         let pkg = Package::new("cargo:exa", family);
         assert_eq!(pkg.package_manager, PackageManager::Cargo);
+    }
+
+    #[test]
+    fn test_npm_package_specs_are_preserved() {
+        let default = PackageManager::Cargo;
+
+        for spec in ["prettier", "@biomejs/biome", "typescript@5.8.3"] {
+            let pkg = Package::new(&format!("npm:{spec}"), default);
+            assert_eq!(pkg.name, spec);
+            assert_eq!(pkg.package_manager, PackageManager::Npm);
+        }
     }
 
     #[test]
