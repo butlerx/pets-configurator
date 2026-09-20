@@ -185,14 +185,21 @@ impl Package {
                     Err(_) => Err(ActionError::NoPackageManager),
                 }
             }
+            // `brew install <name>` resolves casks as well as formulae, so a
+            // cask-only package such as firefox has to be looked for in both
+            // lists or it is reported missing and reinstalled on every run.
             PackageManager::Homebrew => {
-                match Command::new("brew")
-                    .args(["list", "--formula", "-1", &self.name])
-                    .output()
-                {
-                    Ok(output) => Ok(output.status.success()),
-                    Err(_) => Err(ActionError::NoPackageManager),
+                for list in ["--formula", "--cask"] {
+                    match Command::new("brew")
+                        .args(["list", list, "-1", &self.name])
+                        .output()
+                    {
+                        Ok(output) if output.status.success() => return Ok(true),
+                        Ok(_) => {}
+                        Err(_) => return Err(ActionError::NoPackageManager),
+                    }
                 }
+                Ok(false)
             }
             PackageManager::Pip => match Command::new(package_manager::pip_binary())
                 .args(["show", &self.name])
