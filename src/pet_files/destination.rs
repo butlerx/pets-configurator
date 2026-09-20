@@ -15,14 +15,15 @@ fn sha256(path: &str) -> Result<Vec<u8>, ParseError> {
 }
 
 fn expand_tilde(path: &str) -> PathBuf {
-    if let Some(rest) = path.strip_prefix("~/") {
-        if let Ok(home) = env::var("HOME") {
-            return PathBuf::from(home).join(rest);
-        }
-    } else if path == "~" {
-        if let Ok(home) = env::var("HOME") {
-            return PathBuf::from(home);
-        }
+    if let Some(rest) = path.strip_prefix("~/")
+        && let Ok(home) = env::var("HOME")
+    {
+        return PathBuf::from(home).join(rest);
+    }
+    if path == "~"
+        && let Ok(home) = env::var("HOME")
+    {
+        return PathBuf::from(home);
     }
     PathBuf::from(path)
 }
@@ -87,34 +88,37 @@ impl Destination {
         };
 
         match fs::symlink_metadata(&self.dest) {
-            Ok(metadata) => {
-                // Easy case first: Dest exists and it is not a symlink
-                if !metadata.file_type().is_symlink() {
-                    log::error!("{} already exists", self.dest);
-                    return None;
-                }
-
-                match fs::read_link(&self.dest) {
-                    Ok(path) => {
-                        if source == path.to_string_lossy() {
-                            // Happy path
-                            log::debug!("{} is a symlink to {} already", self.dest, source);
-                        } else {
-                            log::error!(
-                                "{} is a symlink to {} instead of {}",
-                                self.dest,
-                                path.display(),
-                                source
-                            );
-                        }
-                        None
-                    }
-                    Err(err) => {
-                        log::error!("cannot read link Dest file {}: {}", self.dest, err);
-                        None
-                    }
-                }
+            Ok(metadata) if !metadata.file_type().is_symlink() => {
+                log::debug!("{} exists and will be replaced by a symlink", self.dest);
+                Some(Action::symlink(
+                    Cause::Update,
+                    PathBuf::from(source),
+                    PathBuf::from(&self.dest),
+                ))
             }
+            Ok(_) => match fs::read_link(&self.dest) {
+                Ok(path) if source == path.to_string_lossy() => {
+                    log::debug!("{} is a symlink to {} already", self.dest, source);
+                    None
+                }
+                Ok(path) => {
+                    log::debug!(
+                        "{} is a symlink to {} instead of {} and will be replaced",
+                        self.dest,
+                        path.display(),
+                        source
+                    );
+                    Some(Action::symlink(
+                        Cause::Update,
+                        PathBuf::from(source),
+                        PathBuf::from(&self.dest),
+                    ))
+                }
+                Err(err) => {
+                    log::error!("cannot read link Dest file {}: {}", self.dest, err);
+                    None
+                }
+            },
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 // dest does not exist yet. Happy path, we are gonna create it!
                 Some(Action::symlink(
@@ -322,7 +326,7 @@ mod tests {
     }
 
     #[test]
-    fn test_destination_needs_link_none_when_dest_exists_as_regular_file() {
+    fn test_destination_replaces_regular_file_with_link() {
         let dir = tempdir().unwrap();
         let dest_path = dir.path().join("dest_file");
         let source_path = dir.path().join("source_file");
@@ -330,11 +334,14 @@ mod tests {
         fs::write(&source_path, b"source").unwrap();
 
         let dest = Destination::new(dest_path.to_str().unwrap(), true, false);
-        assert_eq!(dest.needs_link(source_path.to_str().unwrap()), None);
+        assert_eq!(
+            dest.needs_link(source_path.to_str().unwrap()),
+            Some(Action::symlink(Cause::Update, source_path, dest_path))
+        );
     }
 
     #[test]
-    fn test_destination_needs_link_none_when_symlink_points_elsewhere() {
+    fn test_destination_replaces_symlink_that_points_elsewhere() {
         let dir = tempdir().unwrap();
         let dest_path = dir.path().join("link_path");
         let source_path = dir.path().join("source_file");
@@ -344,7 +351,10 @@ mod tests {
         std::os::unix::fs::symlink(&wrong_target, &dest_path).unwrap();
 
         let dest = Destination::new(dest_path.to_str().unwrap(), true, false);
-        assert_eq!(dest.needs_link(source_path.to_str().unwrap()), None);
+        assert_eq!(
+            dest.needs_link(source_path.to_str().unwrap()),
+            Some(Action::symlink(Cause::Update, source_path, dest_path))
+        );
     }
 
     #[test]

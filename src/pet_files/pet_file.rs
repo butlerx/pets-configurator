@@ -43,18 +43,28 @@ impl PetsFile {
             path.display()
         );
 
-        // Get absolute path to the source.
-        let abs = fs::canonicalize(path)?;
-        let source = abs.to_string_lossy().into_owned();
-        let is_petsfile = match abs.file_name() {
-            Some(file_name) => file_name.to_string_lossy().to_lowercase() == ".petsfile",
-            _ => false,
+        // A .petsfile manages its parent directory. A named sidecar such as
+        // settings.json.petsfile manages the adjacent settings.json instead.
+        let config_path = fs::canonicalize(path)?;
+        let file_name = config_path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_lowercase());
+        let is_directory_marker = file_name.as_deref() == Some(".petsfile");
+        let source_path = if !is_directory_marker
+            && config_path
+                .extension()
+                .is_some_and(|extension| extension == "petsfile")
+        {
+            fs::canonicalize(config_path.with_extension(""))?
+        } else {
+            config_path
         };
+        let source = source_path.to_string_lossy().into_owned();
 
         let dest = match modelines.get("destfile") {
-            Some(dest) => destination::Destination::new(&dest[0], false, is_petsfile),
+            Some(dest) => destination::Destination::new(&dest[0], false, is_directory_marker),
             None => match modelines.get("symlink") {
-                Some(dest) => destination::Destination::new(&dest[0], true, is_petsfile),
+                Some(dest) => destination::Destination::new(&dest[0], true, is_directory_marker),
                 None => return Err(parser::ParseError::MissingDestFile(source)),
             },
         };
@@ -318,18 +328,18 @@ impl PetsFile {
         let file_gid = stat.gid();
 
         // Get the file ownership details from the metadata
-        if let Some(want_uid) = want_user_id {
-            if file_uid != want_uid {
-                log::info!("{destination} is owned by uid {file_uid} instead of {want_uid}");
-                return Some(action);
-            }
+        if let Some(want_uid) = want_user_id
+            && file_uid != want_uid
+        {
+            log::info!("{destination} is owned by uid {file_uid} instead of {want_uid}");
+            return Some(action);
         }
 
-        if let Some(want_gid) = want_group_id {
-            if file_gid != want_gid {
-                log::info!("{destination} is owned by gid {file_gid} instead of {want_gid}");
-                return Some(action);
-            }
+        if let Some(want_gid) = want_group_id
+            && file_gid != want_gid
+        {
+            log::info!("{destination} is owned by gid {file_gid} instead of {want_gid}");
+            return Some(action);
         }
 
         log::debug!("{destination} is owned by {file_uid}:{file_gid} already");
@@ -468,6 +478,47 @@ mod tests {
         let parsed = PetsFile::from_path(&source, package_manager_for_tests()).unwrap();
         assert!(parsed.dest.is_symlink());
         assert_eq!(parsed.destination(), link_path.to_string_lossy());
+    }
+
+    #[test]
+    fn test_named_petsfile_manages_adjacent_source() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("settings.json");
+        let sidecar = dir.path().join("settings.json.petsfile");
+        let link_path = dir.path().join("settings-link.json");
+        std::fs::write(&source, r#"{"theme":"dark"}"#).unwrap();
+        write_pets_file(
+            &sidecar,
+            &[&format!("# pets: symlink={}", link_path.display())],
+            "",
+        );
+
+        let mut parsed = PetsFile::from_path(&sidecar, package_manager_for_tests()).unwrap();
+        parsed.user = None;
+        parsed.group = None;
+
+        let source_abs = std::fs::canonicalize(&source).unwrap();
+        assert_eq!(parsed.source(), source_abs.to_string_lossy());
+        assert_eq!(
+            Vec::<Action>::from(&parsed),
+            vec![Action::symlink(Cause::Link, source_abs, link_path)]
+        );
+    }
+
+    #[test]
+    fn test_named_petsfile_requires_adjacent_source() {
+        let dir = tempdir().unwrap();
+        let sidecar = dir.path().join("missing.json.petsfile");
+        write_pets_file(
+            &sidecar,
+            &["# pets: symlink=/tmp/pets-missing-sidecar-target"],
+            "",
+        );
+
+        assert!(matches!(
+            PetsFile::from_path(&sidecar, package_manager_for_tests()),
+            Err(parser::ParseError::FileError(_))
+        ));
     }
 
     #[test]

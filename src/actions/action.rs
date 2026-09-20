@@ -20,6 +20,12 @@ pub enum Operation {
     Copy { source: PathBuf, dest: PathBuf },
     /// Create a symbolic link at `dest` pointing to `source`.
     Symlink { source: PathBuf, dest: PathBuf },
+    /// Write deterministic generated content to a destination file.
+    Generate {
+        content: Vec<u8>,
+        dest: PathBuf,
+        replacing: bool,
+    },
     /// Create a directory and its parents.
     CreateDir { path: PathBuf },
     /// Set file permissions (octal mode).
@@ -37,6 +43,8 @@ pub enum Operation {
     Command {
         args: Vec<String>,
         requires_sudo: bool,
+        cwd: Option<PathBuf>,
+        success_stamp: Option<(PathBuf, String)>,
     },
 }
 
@@ -49,6 +57,7 @@ impl fmt::Display for Operation {
             Self::Symlink { source, dest } => {
                 write!(f, "ln -s {} {}", source.display(), dest.display())
             }
+            Self::Generate { dest, .. } => write!(f, "generate {}", dest.display()),
             Self::CreateDir { path } => write!(f, "mkdir -p {}", path.display()),
             Self::Chmod { path, mode } => write!(f, "chmod {mode:o} {}", path.display()),
             Self::Chown {
@@ -66,11 +75,18 @@ impl fmt::Display for Operation {
             Self::Command {
                 args,
                 requires_sudo,
+                cwd,
+                ..
             } => {
-                if *requires_sudo {
-                    write!(f, "sudo {}", args.join(" "))
+                let command = if *requires_sudo {
+                    format!("sudo {}", args.join(" "))
                 } else {
-                    write!(f, "{}", args.join(" "))
+                    args.join(" ")
+                };
+                if let Some(cwd) = cwd {
+                    write!(f, "(cd {} && {command})", cwd.display())
+                } else {
+                    write!(f, "{command}")
                 }
             }
         }
@@ -105,6 +121,17 @@ impl Action {
         Self {
             cause,
             operation: Operation::Symlink { source, dest },
+        }
+    }
+
+    pub fn generated_file(content: Vec<u8>, dest: PathBuf, replacing: bool) -> Self {
+        Self {
+            cause: Cause::Generate,
+            operation: Operation::Generate {
+                content,
+                dest,
+                replacing,
+            },
         }
     }
 
@@ -147,6 +174,8 @@ impl Action {
             operation: Operation::Command {
                 args,
                 requires_sudo: false,
+                cwd: None,
+                success_stamp: None,
             },
         }
     }
@@ -157,6 +186,38 @@ impl Action {
             operation: Operation::Command {
                 args,
                 requires_sudo: true,
+                cwd: None,
+                success_stamp: None,
+            },
+        }
+    }
+
+    pub fn command_in(cause: Cause, args: Vec<String>, cwd: PathBuf) -> Self {
+        Self {
+            cause,
+            operation: Operation::Command {
+                args,
+                requires_sudo: false,
+                cwd: Some(cwd),
+                success_stamp: None,
+            },
+        }
+    }
+
+    pub fn stateful_command(
+        cause: Cause,
+        args: Vec<String>,
+        cwd: PathBuf,
+        state_path: PathBuf,
+        state_value: String,
+    ) -> Self {
+        Self {
+            cause,
+            operation: Operation::Command {
+                args,
+                requires_sudo: false,
+                cwd: Some(cwd),
+                success_stamp: Some((state_path, state_value)),
             },
         }
     }
@@ -196,7 +257,23 @@ impl Action {
                 Ok(0)
             }
             Operation::Symlink { source, dest } => {
+                if cause == Cause::Update {
+                    replace_link_destination(&dest, config.backup)?;
+                }
                 unix_fs::symlink(&source, &dest)?;
+                Ok(0)
+            }
+            Operation::Generate {
+                content,
+                dest,
+                replacing,
+            } => {
+                if config.backup && replacing && dest.exists() {
+                    let backup = backup_path_for(&dest);
+                    fs::copy(&dest, &backup)?;
+                    log::info!("backed up {} to {}", dest.display(), backup.display());
+                }
+                atomic_write(&content, &dest)?;
                 Ok(0)
             }
             Operation::CreateDir { path } => {
@@ -229,7 +306,15 @@ impl Action {
             Operation::Command {
                 args,
                 requires_sudo,
-            } => run_command(&args, requires_sudo, cause),
+                cwd,
+                success_stamp,
+            } => {
+                let status = run_command(&args, requires_sudo, cause, cwd.as_deref())?;
+                if let Some((path, value)) = success_stamp {
+                    atomic_write(value.as_bytes(), &path)?;
+                }
+                Ok(status)
+            }
         }
     }
 
@@ -248,21 +333,30 @@ impl Action {
     }
 }
 
-fn build_command(args: &[String], requires_sudo: bool) -> Command {
-    if requires_sudo {
-        let mut c = Command::new("sudo");
-        c.arg(&args[0]);
-        c.args(&args[1..]);
-        c
+fn build_command(args: &[String], requires_sudo: bool, cwd: Option<&Path>) -> Command {
+    let mut command = if requires_sudo {
+        let mut command = Command::new("sudo");
+        command.arg(&args[0]);
+        command.args(&args[1..]);
+        command
     } else {
-        let mut c = Command::new(&args[0]);
-        c.args(&args[1..]);
-        c
+        let mut command = Command::new(&args[0]);
+        command.args(&args[1..]);
+        command
+    };
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
     }
+    command
 }
 
-fn run_command(args: &[String], requires_sudo: bool, cause: Cause) -> Result<i32, ActionError> {
-    let mut cmd = build_command(args, requires_sudo);
+fn run_command(
+    args: &[String],
+    requires_sudo: bool,
+    cause: Cause,
+    cwd: Option<&Path>,
+) -> Result<i32, ActionError> {
+    let mut cmd = build_command(args, requires_sudo, cwd);
 
     if cause == Cause::Pkg {
         cmd.env("DEBIAN_FRONTEND", "noninteractive");
@@ -270,10 +364,7 @@ fn run_command(args: &[String], requires_sudo: bool, cause: Cause) -> Result<i32
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
 
-        let Ok(status) = cmd.status() else {
-            return Ok(0);
-        };
-
+        let status = cmd.status()?;
         let code = status.code().unwrap_or(1);
         return if status.success() {
             Ok(code)
@@ -307,6 +398,31 @@ fn run_command(args: &[String], requires_sudo: bool, cause: Cause) -> Result<i32
 
 fn backup_path_for(dest: &Path) -> PathBuf {
     PathBuf::from(format!("{}.pets-backup", dest.to_string_lossy()))
+}
+
+fn replace_link_destination(dest: &Path, backup: bool) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(dest)?;
+    if metadata.file_type().is_symlink() {
+        return fs::remove_file(dest);
+    }
+
+    if backup {
+        let backup_path = backup_path_for(dest);
+        if let Ok(existing) = fs::symlink_metadata(&backup_path) {
+            remove_path(&backup_path, &existing)?;
+        }
+        fs::rename(dest, backup_path)
+    } else {
+        remove_path(dest, &metadata)
+    }
+}
+
+fn remove_path(path: &Path, metadata: &fs::Metadata) -> io::Result<()> {
+    if metadata.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    }
 }
 
 fn log_unified_diff(source: &Path, dest: &Path) -> Result<(), ActionError> {
@@ -390,6 +506,15 @@ fn atomic_copy(source: &Path, dest: &Path) -> io::Result<()> {
     Ok(())
 }
 
+fn atomic_write(content: &[u8], dest: &Path) -> io::Result<()> {
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp_path = PathBuf::from(format!("{}.pets-tmp", dest.to_string_lossy()));
+    fs::write(&tmp_path, content)?;
+    fs::rename(tmp_path, dest)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -415,6 +540,10 @@ mod tests {
             PathBuf::from("/tmp/link"),
         );
         assert!(symlink.to_string().contains("ln -s /tmp/source /tmp/link"));
+
+        let generated =
+            Action::generated_file(b"completion".to_vec(), PathBuf::from("/tmp/_pets"), false);
+        assert!(generated.to_string().contains("generate /tmp/_pets"));
 
         let mkdir = Action::create_dir(Cause::Dir, PathBuf::from("/tmp/newdir"));
         assert!(mkdir.to_string().contains("mkdir -p /tmp/newdir"));
@@ -449,6 +578,7 @@ mod tests {
         let actions = vec![
             Action::copy_file(Cause::Create, missing.clone(), missing.clone()),
             Action::symlink(Cause::Link, missing.clone(), missing.clone()),
+            Action::generated_file(Vec::new(), missing.clone(), false),
             Action::create_dir(Cause::Dir, missing.clone()),
             Action::chmod(Cause::Mode, missing.clone(), 0o600),
             Action::chown(
@@ -497,6 +627,22 @@ mod tests {
     }
 
     #[test]
+    fn test_perform_generated_file_writes_and_backs_up_content() {
+        let tmp = tempdir().unwrap();
+        let dest = tmp.path().join("nested/_pets");
+        fs::create_dir_all(dest.parent().unwrap()).unwrap();
+        fs::write(&dest, "old completion").unwrap();
+
+        let action = Action::generated_file(b"new completion".to_vec(), dest.clone(), true);
+        assert_eq!(action.perform(&run_config(false, true)).unwrap(), 0);
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "new completion");
+        assert_eq!(
+            fs::read_to_string(backup_path_for(&dest)).unwrap(),
+            "old completion"
+        );
+    }
+
+    #[test]
     fn test_perform_symlink_creates_symlink() {
         let tmp = tempdir().unwrap();
         let src = tmp.path().join("source.txt");
@@ -509,6 +655,38 @@ mod tests {
 
         let link_target = fs::read_link(dest).unwrap();
         assert_eq!(link_target, src);
+    }
+
+    #[test]
+    fn test_perform_symlink_replaces_wrong_link() {
+        let tmp = tempdir().unwrap();
+        let src = tmp.path().join("source.txt");
+        let wrong = tmp.path().join("wrong.txt");
+        let dest = tmp.path().join("dest.link");
+        fs::write(&src, "right").unwrap();
+        fs::write(&wrong, "wrong").unwrap();
+        unix_fs::symlink(&wrong, &dest).unwrap();
+
+        let action = Action::symlink(Cause::Update, src.clone(), dest.clone());
+        assert_eq!(action.perform(&run_config(false, true)).unwrap(), 0);
+        assert_eq!(fs::read_link(dest).unwrap(), src);
+    }
+
+    #[test]
+    fn test_perform_symlink_backs_up_regular_file_before_replacing_it() {
+        let tmp = tempdir().unwrap();
+        let src = tmp.path().join("source.txt");
+        let dest = tmp.path().join("dest.txt");
+        fs::write(&src, "right").unwrap();
+        fs::write(&dest, "existing").unwrap();
+
+        let action = Action::symlink(Cause::Update, src.clone(), dest.clone());
+        assert_eq!(action.perform(&run_config(false, true)).unwrap(), 0);
+        assert_eq!(fs::read_link(&dest).unwrap(), src);
+        assert_eq!(
+            fs::read_to_string(backup_path_for(&dest)).unwrap(),
+            "existing"
+        );
     }
 
     #[test]
@@ -549,6 +727,31 @@ mod tests {
         let config = run_config(false, false);
         assert_eq!(action.perform(&config).unwrap(), 0);
         assert_eq!(fs::read_to_string(output_file).unwrap(), "hello\n");
+    }
+
+    #[test]
+    fn test_stateful_command_uses_working_directory_and_writes_stamp() {
+        let tmp = tempdir().unwrap();
+        let output = tmp.path().join("cwd.txt");
+        let stamp = tmp.path().join("state/package-set.sha256");
+        let action = Action::stateful_command(
+            Cause::Pkg,
+            vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                format!("pwd > {}", output.display()),
+            ],
+            tmp.path().to_path_buf(),
+            stamp.clone(),
+            "digest\n".to_string(),
+        );
+
+        assert_eq!(action.perform(&run_config(false, false)).unwrap(), 0);
+        assert_eq!(
+            fs::read_to_string(output).unwrap().trim(),
+            fs::canonicalize(tmp.path()).unwrap().to_string_lossy()
+        );
+        assert_eq!(fs::read_to_string(stamp).unwrap(), "digest\n");
     }
 
     #[test]

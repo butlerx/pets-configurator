@@ -16,9 +16,11 @@ project. See the original for
 
 ## How it works
 
-Pets is driven by comments embedded in config files, not a DSL. Drop config
-files into a directory (`~/pets` by default), annotate them with `# pets:`
-directives, and run `pets`. It will:
+Pets is driven primarily by comments embedded in config files, not a DSL. Drop
+config files into a directory (`~/pets` by default), annotate them with
+`# pets:` directives, and run `pets`. Named `*.petsfile` sidecars cover formats
+that cannot contain comments, while an optional `.pets.toml` handles
+repository-level resources. Pets will:
 
 1. **Install packages** listed in `package` directives
 2. **Validate** changes with the `pre` command (if specified)
@@ -26,8 +28,8 @@ directives, and run `pets`. It will:
 4. **Set ownership and permissions** (`owner`, `group`, `mode`)
 5. **Run post-update commands** like service reloads (`post`)
 
-Files without `# pets:` directives are ignored. Directory structure is
-arbitrary.
+Files without inline directives or a matching `*.petsfile` sidecar are ignored.
+Directory structure is arbitrary.
 
 ## Quick start
 
@@ -77,7 +79,12 @@ Options:
 Commands:
     clean-backups     Remove all .pets-backup files from destination directories
     completions       Generate shell completions (bash, zsh, fish, etc.)
+    sync              Synchronize the discovered or configured Pets repository
 ```
+
+When the current directory or one of its parents contains `.pets.toml`, `pets`
+automatically uses that directory. Run `pets sync` to make this repository-aware
+workflow explicit.
 
 To use a different configuration directory:
 
@@ -169,16 +176,66 @@ while other valid configuration files continue to be processed.
 | `post`     | Command to run after the file is deployed (e.g. restart a service).                                                                                                                                                                                           |
 | `when`     | Conditional directive. File is only applied when all conditions match. Supports `hostname:<name>` and `os:linux` / `os:macos`. Can be specified multiple times (AND logic).                                                                                   |
 
+### Sidecar files
+
+For JSON, Markdown, binary files, and other formats that cannot contain a Pets
+comment, place the directives in an adjacent `<filename>.petsfile` sidecar:
+
+```text
+settings.json
+settings.json.petsfile
+```
+
+```text
+# pets: symlink=~/.config/example/settings.json
+```
+
+Pets strips the `.petsfile` suffix and manages the adjacent `settings.json` as
+the source. Sidecars support the same directives as inline configuration.
+
 ### Directory symlinks
 
-To symlink an entire directory, create a `.petsfile` inside it with a `symlink`
-directive:
+To symlink an entire directory, create a file named exactly `.petsfile` inside
+it with a `symlink` directive:
 
-```
+```text
 # pets: symlink=~/.config/i3
 ```
 
-The parent directory of the `.petsfile` will be symlinked to the target.
+The parent directory of `.petsfile` will be symlinked to the target.
+
+### Repository resources
+
+Add `.pets.toml` at the repository root for resources that do not belong to one
+source file:
+
+```toml
+version = 1
+
+[repository]
+submodules = true
+
+[[generated]]
+kind = "completion"
+shell = "zsh"
+target = "zsh-completions/_pets"
+
+[[package_sets]]
+manager = "npm"
+manifest = "package.json"
+lockfile = "package-lock.json"
+```
+
+Repository resources are included in `sync`, `--dry-run`, `--check`, `list`, and
+backup cleanup:
+
+- `repository.submodules` initializes missing Git submodules and resets
+  mismatched checkouts to their recorded commits.
+- `generated` currently supports shell completions. Relative targets resolve
+  from the repository root; `~/` targets resolve from the home directory.
+- `package_sets` currently supports npm. Pets runs `npm ci` when a lockfile is
+  configured, otherwise `npm install`, and reruns only when the manifest or
+  lockfile changes or `node_modules` is missing.
 
 ### Conditional deployment
 

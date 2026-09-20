@@ -11,6 +11,8 @@ pub enum Cause {
     Dir,
     Owner,
     Mode,
+    Generate,
+    Repository,
     Post,
 }
 
@@ -24,6 +26,8 @@ impl fmt::Display for Cause {
             Cause::Dir => "DIR_CREATE".green().to_string(),
             Cause::Owner => "OWNER".normal().to_string(),
             Cause::Mode => "CHMOD".normal().to_string(),
+            Cause::Generate => "GENERATE".cyan().to_string(),
+            Cause::Repository => "REPOSITORY_UPDATE".cyan().to_string(),
             Cause::Post => "POST_UPDATE".blue().to_string(),
             Cause::None => "NONE".normal().to_string(),
         };
@@ -54,6 +58,8 @@ mod tests {
         assert_rendered_contains(Cause::Dir, "DIR_CREATE");
         assert_rendered_contains(Cause::Owner, "OWNER");
         assert_rendered_contains(Cause::Mode, "CHMOD");
+        assert_rendered_contains(Cause::Generate, "GENERATE");
+        assert_rendered_contains(Cause::Repository, "REPOSITORY_UPDATE");
         assert_rendered_contains(Cause::Post, "POST_UPDATE");
     }
 }

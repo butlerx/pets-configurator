@@ -9,6 +9,8 @@ pub struct RunSummary {
     dirs_created: usize,
     ownership_changes: usize,
     mode_changes: usize,
+    generated: usize,
+    repository_updates: usize,
     post_commands: usize,
     errors: usize,
     skipped: usize,
@@ -24,6 +26,8 @@ impl RunSummary {
             Cause::Dir => self.dirs_created += 1,
             Cause::Owner => self.ownership_changes += 1,
             Cause::Mode => self.mode_changes += 1,
+            Cause::Generate => self.generated += 1,
+            Cause::Repository => self.repository_updates += 1,
             Cause::Post => self.post_commands += 1,
             Cause::None => {}
         }
@@ -46,6 +50,8 @@ impl RunSummary {
             (self.packages_installed, "packages installed"),
             (self.ownership_changes, "ownership changes"),
             (self.mode_changes, "mode changes"),
+            (self.generated, "generated"),
+            (self.repository_updates, "repository updates"),
             (self.post_commands, "post commands"),
             (self.skipped, "already in sync"),
             (self.errors, "errors"),
@@ -74,6 +80,8 @@ impl RunSummary {
             (self.packages_installed, "packages installed"),
             (self.ownership_changes, "ownership changes"),
             (self.mode_changes, "mode changes"),
+            (self.generated, "generated"),
+            (self.repository_updates, "repository updates"),
             (self.post_commands, "post commands"),
             (self.skipped, "already in sync"),
             (self.errors, "errors"),
@@ -108,6 +116,8 @@ mod tests {
         s.record(Cause::Pkg);
         s.record(Cause::Owner);
         s.record(Cause::Mode);
+        s.record(Cause::Generate);
+        s.record(Cause::Repository);
         s.record(Cause::Post);
 
         let parts = s.as_parts();
@@ -118,6 +128,8 @@ mod tests {
         assert!(parts.contains(&"1 packages installed".to_string()));
         assert!(parts.contains(&"1 ownership changes".to_string()));
         assert!(parts.contains(&"1 mode changes".to_string()));
+        assert!(parts.contains(&"1 generated".to_string()));
+        assert!(parts.contains(&"1 repository updates".to_string()));
         assert!(parts.contains(&"1 post commands".to_string()));
     }
 

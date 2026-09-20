@@ -35,6 +35,8 @@ pub enum ParseError {
     InvalidFileMode(String),
     #[error("Invalid condition: {0}")]
     InvalidCondition(String),
+    #[error("Invalid pets manifest '{path}': {message}")]
+    InvalidManifest { path: PathBuf, message: String },
     #[error("Error hashing source file: {0}")]
     HashError(#[from] merkle_hash::error::IndexingError),
 }
@@ -254,7 +256,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test_file");
         let mut file = File::create(&file_path).unwrap();
-        writeln!(file, "# pets: destfile=/etc/foo, pacakge=vim").unwrap();
+        writeln!(file, "# pets: destfile=/etc/foo, packages=vim").unwrap();
         let actual = read_modelines(file_path).unwrap_err();
         assert!(matches!(
             actual,

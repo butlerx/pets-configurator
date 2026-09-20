@@ -2,11 +2,13 @@
 
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
-use std::{env, io, process::ExitCode};
+use std::{io, process::ExitCode};
 
 mod actions;
 mod commands;
+mod config_root;
 mod lock;
+mod manifest;
 mod pet_files;
 mod planner;
 mod summary;
@@ -14,7 +16,7 @@ mod summary;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 #[allow(clippy::struct_excessive_bools)]
-struct Args {
+pub(crate) struct Args {
     /// Pets configuration directory
     #[arg(short, long, default_value_t = default_conf_dir(), env = "PETS_DIR")]
     conf_dir: String,
@@ -55,11 +57,14 @@ enum SubCmd {
     /// Show managed files and their sync status
     #[command(alias = "status")]
     List,
+    /// Synchronize the discovered or configured Pets repository
+    Sync,
 }
 
 fn default_conf_dir() -> String {
-    let home_dir = env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    format!("{home_dir}/pets")
+    config_root::default_conf_dir()
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn setup_logging(debug: bool, quiet: bool) {
@@ -84,7 +89,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some(SubCmd::List) => commands::list(&args.conf_dir),
-        None if args.check => commands::check(&args.conf_dir),
-        None => commands::apply(&args.conf_dir, args.dry_run, !args.no_backup),
+        Some(SubCmd::Sync) | None if args.check => commands::check(&args.conf_dir),
+        Some(SubCmd::Sync) | None => commands::apply(&args.conf_dir, args.dry_run, !args.no_backup),
     }
 }

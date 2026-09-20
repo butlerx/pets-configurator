@@ -129,6 +129,25 @@ mod tests {
     }
 
     #[test]
+    fn test_directory_walker_collects_named_petsfile_sidecars() {
+        let temp_dir = TempDir::new().unwrap();
+        let source = temp_dir.path().join("settings.json");
+        let sidecar = temp_dir.path().join("settings.json.petsfile");
+        fs::write(&source, "{}").unwrap();
+        fs::write(&sidecar, "# pets: symlink=/tmp/pets-settings.json\n").unwrap();
+
+        let files = DirectoryWalker::new(temp_dir.path())
+            .collect(test_package_manager())
+            .unwrap();
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(
+            files[0].source(),
+            fs::canonicalize(source).unwrap().to_string_lossy()
+        );
+    }
+
+    #[test]
     fn test_directory_walker_handles_empty_directory() {
         let temp_dir = TempDir::new().unwrap();
         let walker = DirectoryWalker::new(temp_dir.path());
