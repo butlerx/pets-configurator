@@ -33,3 +33,10 @@ walkdir       = "2"
 
 [dev-dependencies]
 tempfile = "3.14"
+
+[lints.clippy]
+all      = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+[lints.rust]
+unsafe_code = "deny"

@@ -402,7 +402,7 @@ target = "completions/_pets"
             })
             .unwrap();
         assert!(root.path().join("completions/_pets").is_file());
-        assert!(manifest.plan_actions(root.path()).unwrap().is_empty());
+        assert_eq!(manifest.plan_actions(root.path()).unwrap().len(), 0);
         assert!(
             manifest
                 .resource_statuses(root.path())

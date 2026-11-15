@@ -684,7 +684,7 @@ mod tests {
             .into_owned();
         assert_eq!(parsed.source(), expected_source);
         assert_eq!(parsed.destination(), dest.to_string_lossy());
-        assert!(parsed.packages().is_empty());
+        assert_eq!(parsed.packages().len(), 0);
         assert!(parsed.matches_conditions());
         assert!(parsed.is_valid());
     }
@@ -787,6 +787,6 @@ mod tests {
         parsed.group = None;
 
         let actions: Vec<Action> = (&parsed).into();
-        assert!(actions.is_empty());
+        assert_eq!(actions.len(), 0);
     }
 }
