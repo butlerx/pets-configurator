@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn default_summary_is_empty() {
         let summary = RunSummary::default();
-        assert!(summary.as_parts().is_empty());
+        assert_eq!(summary.as_parts().len(), 0);
     }
 
     #[test]
@@ -137,7 +137,7 @@ mod tests {
     fn record_none_is_noop() {
         let mut s = RunSummary::default();
         s.record(Cause::None);
-        assert!(s.as_parts().is_empty());
+        assert_eq!(s.as_parts().len(), 0);
     }
 
     #[test]

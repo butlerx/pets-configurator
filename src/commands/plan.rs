@@ -43,14 +43,14 @@ mod tests {
     fn load_and_plan_empty_dir_returns_empty() {
         let dir = tempdir().unwrap();
         let actions = load_and_plan(dir.path().to_str().unwrap()).unwrap();
-        assert!(actions.is_empty());
+        assert_eq!(actions.len(), 0);
     }
 
     #[test]
     fn load_and_plan_nonexistent_dir_returns_empty() {
         let result = load_and_plan("/tmp/pets-definitely-does-not-exist-xyz");
         assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
+        assert_eq!(result.unwrap().len(), 0);
     }
 
     #[test]
@@ -109,7 +109,7 @@ mod tests {
         writeln!(f, "# pets: destfile=/tmp/pets-test-load-plan-output").unwrap();
 
         let actions = load_and_plan(dir.path().to_str().unwrap()).unwrap();
-        assert!(!actions.is_empty());
+        assert_ne!(actions.len(), 0);
 
         let _ = fs::remove_file("/tmp/pets-test-load-plan-output");
     }
