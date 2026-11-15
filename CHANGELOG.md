@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/butlerx/pets-configurator/compare/v0.7.1...v0.7.2) (2026-09-20)
+
+
+### Bug Fixes
+
+* apply conditions consistently across commands ([1a5237f](https://github.com/butlerx/pets-configurator/commit/1a5237fc422626e3de96ea9a0c7c83dbc76b2371))
+
 ## [0.7.1](https://github.com/butlerx/pets-configurator/compare/v0.7.0...v0.7.1) (2026-09-20)
 
 

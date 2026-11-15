@@ -1,7 +1,7 @@
 [tools]
 rust                   = { version = "stable", profile = "default", components = "rust-analyzer" }
 prek                   = "latest"
-tombi                  = "1.2.5"
+tombi                  = "1.11.2"
 zizmor                 = "latest"
 "cargo:cargo-binstall" = "latest"
 "cargo:cargo-audit"    = "latest"
@@ -48,12 +48,12 @@ run         = "cargo clippy --fix --all-targets --all-features --allow-staged ${
 description = "Format Rust and TOML"
 run         = ["cargo fmt --all", "tombi format"]
 alias       = "f"
-sources     = ["src/**/*.rs", "Cargo.toml"]
+sources     = ["src/**/*.rs", "Cargo.toml", "*.toml", ".yamlfmt.yaml", ".editorconfig"]
 
 [tasks."format:check"]
 description = "Check Rust and TOML formatting"
 run         = ["cargo fmt --all --check", "tombi format --check"]
-sources     = ["src/**/*.rs", "Cargo.toml"]
+sources     = ["src/**/*.rs", "Cargo.toml", "*.toml", ".yamlfmt.yaml", ".editorconfig"]
 
 [tasks.audit]
 description = "Audit dependencies for known vulnerabilities"
