@@ -52,3 +52,8 @@ hooks = [
 repo  = "https://github.com/compilerla/conventional-pre-commit"
 rev   = "91ab4bf57e58b32adf1a122681f6ebe164d081c8"
 hooks = [{ id = "conventional-pre-commit", stages = ["commit-msg"] }]
+
+[[repos]]
+repo  = "https://github.com/compilerla/conventional-pre-commit"
+rev   = "91ab4bf57e58b32adf1a122681f6ebe164d081c8"
+hooks = [{ id = "conventional-pre-commit", stages = ["commit-msg"] }]
